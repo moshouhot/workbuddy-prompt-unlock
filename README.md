@@ -30,11 +30,13 @@ node wb.mjs status --root="D:\Program Files\WorkBuddy" --json
 
 准备条件：Windows 10/11 x64、Node.js LTS（需 `node` 在 PATH 中）、GUI 另需 .NET 8 Desktop Runtime x64。
 
-### 用 Release 包（推荐给不熟悉命令行的用户）
+### 用 Release 包（推荐）
 
-在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-<版本>.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），然后**仍需**在解压目录运行一次 `npm install`——压缩包同样不含 `node_modules`，以避免体积膨胀与依赖过时。
+在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.0.0-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 `UI.vbs` 即可。
 
-解压后双击 `UI.vbs` 即可。
+Release 包**已内置** `tools/node_modules`，不需要 `npm install`，也不需要联网。
+
+自己 clone 源码时仍需运行一次 `npm install`（仓库不包含依赖目录）。
 
 ## 人使用：一键完成
 
