@@ -70,11 +70,18 @@ let checked = 0;
 let bad = 0;
 let warned = 0;
 
+// 每个文件只取最新一次备份作基线。
+// 官方升级会改变无关字段（如 prompts[].template 之外的顶层 key），
+// 拿更旧的备份比对会产生跨版本误报。
+const latestForFile = new Map();
 for (const id of ids) {
   const m = JSON.parse(fs.readFileSync(path.join(B, id, 'manifest.json'), 'utf8'));
+  for (const e of m.entries) if (e.file.endsWith('.json')) latestForFile.set(path.resolve(e.file), { ...e, id });
+}
 
-  for (const e of m.entries) {
-    if (!e.file.endsWith('.json')) continue;
+for (const e of latestForFile.values()) {
+  {
+    const id = e.id;
     if (!fs.existsSync(e.file)) { console.log(`SKIP (不存在)  ${e.file}`); continue; }
 
     const name = path.basename(e.file);

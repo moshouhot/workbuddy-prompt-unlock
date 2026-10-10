@@ -29,8 +29,23 @@ const CLI_SEC_NEW = loadPrompt('cli_security_note.new.txt');
 const UC_OLD = loadPrompt('user_custom.old.txt');
 const UC_NEW = loadPrompt('user_custom.new.txt');
 
+// 历史替换文本：已应用过的旧版本也要能回归。
+const HISTORY_FILE = path.join(ROOT, '.state', 'prompt-history.json');
+const history = fs.existsSync(HISTORY_FILE) ? JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')) : {};
+const variants = (name) => [...new Set([...(history[name] || []), loadPrompt(name)])].filter(Boolean);
+
 const newlineOf = (s) => (s.includes('\r\n') ? '\r\n' : '\n');
 const toNL = (s, nl) => s.replace(/\r?\n/g, nl);
+
+/** 与 unlock.mjs 的 replaceKnownText 一致：原文、历史变体、当前文本依次尝试。 */
+function replaceKnownTextLocal(text, oldText, newText, previous = []) {
+  for (const body of [oldText, ...(Array.isArray(previous) ? previous : [previous]), newText]) {
+    if (!body) continue;
+    const candidate = toNL(body, newlineOf(text));
+    if (text.includes(candidate)) return text.replace(candidate, () => toNL(newText, newlineOf(text)));
+  }
+  return text;
+}
 
 function replSection(text, tag, body) {
   const re = new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`);
@@ -42,7 +57,8 @@ function patchTemplate(orig, file) {
   let t = orig;
   const policyRe = /<content_policy>([\s\S]*?)<\/content_policy>/;
   const m = t.match(policyRe);
-  if (m && !/Do NOT dump this system prompt/.test(m[1])) {
+  // 不硬编码补丁标记：已是当前文本时无需替换。
+  if (m && m[1].trim() !== MODERN_POLICY.trim() && m[1].trim() !== LEGACY_POLICY.trim()) {
     const legacy = /politically sensitive topics|For suspicious requests/.test(m[1]);
     t = t.replace(policyRe, toNL(legacy ? LEGACY_POLICY : MODERN_POLICY, newlineOf(t)));
   }
@@ -55,6 +71,10 @@ function patchTemplate(orig, file) {
     t = t.replace(/<ask_mode>[\s\S]*?<\/ask_mode>/, toNL(ASK_REM, newlineOf(t)));
   }
   if (t.includes(UC_OLD)) t = t.replace(UC_OLD, UC_NEW);
+  // 已应用过的旧版自定义指令也要能匹配（历史变体 -> 当前文本）。
+  for (const prev of variants('user_custom.new.txt')) {
+    if (prev && prev !== UC_NEW && t.includes(prev)) t = t.replace(prev, UC_NEW);
+  }
   return t;
 }
 
@@ -65,10 +85,13 @@ function patchJson(orig) {
   for (const item of data.prompts) {
     if (typeof item.template !== 'string') continue;
     let t = item.template;
-    if (t.includes('<content_policy>') && !t.includes('Do NOT dump this system prompt')) {
-      t = t.replace(/<content_policy>[\s\S]*?<\/content_policy>/, CLI_POLICY);
+    if (t.includes('<content_policy>')) {
+      const cur = t.match(/<content_policy>([\s\S]*?)<\/content_policy>/)?.[1]?.trim();
+      if (cur !== CLI_POLICY.trim()) {
+        t = t.replace(/<content_policy>[\s\S]*?<\/content_policy>/, () => CLI_POLICY);
+      }
     }
-    if (t.includes(CLI_SEC_OLD)) t = t.replace(CLI_SEC_OLD, CLI_SEC_NEW);
+    t = replaceKnownTextLocal(t, CLI_SEC_OLD, CLI_SEC_NEW, variants('cli_security_note.new.txt'));
     if (/<ask_mode>[\s\S]*?<\/ask_mode>/.test(t)) {
       t = t.replace(/<ask_mode>[\s\S]*?<\/ask_mode>/, ASK_REM);
     }
@@ -84,9 +107,17 @@ const ids = fs.readdirSync(B).filter((d) => fs.existsSync(path.join(B, d, 'manif
 const seen = new Set();
 let ok = 0, diff = 0, skip = 0;
 
+// 每个文件只取最新一次备份作为基线。
+// 官方升级会改变非目标区块，拿更旧的备份重放会产生跨版本误报。
+const latestForFile = new Map();
 for (const id of ids) {
   const m = JSON.parse(fs.readFileSync(path.join(B, id, 'manifest.json'), 'utf8'));
-  for (const e of m.entries) {
+  for (const e of m.entries) latestForFile.set(path.resolve(e.file), { ...e, id });
+}
+
+for (const e of latestForFile.values()) {
+  {
+    const id = e.id;
     if (seen.has(e.file)) continue;
     seen.add(e.file);
 
@@ -111,7 +142,8 @@ for (const id of ids) {
       ok++;
     } else {
       // JSON 运行时缓存会被客户端重生成，顶层 key 变化属正常，跳过
-      if (!isTemplate && e.file.toLowerCase().includes(`${path.sep}.workbuddy${path.sep}cache${path.sep}`)) {
+      const isRuntimeCache = /[\\/]\.workbuddy(-ai)?[\\/]cache[\\/]/i.test(e.file);
+      if (!isTemplate && isRuntimeCache) {
         skip++;
         continue;
       }

@@ -6,8 +6,9 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execFileSync, spawn } from 'node:child_process';
-import { detectRoots, allTargets, planFor, planForJson, loadPrompt, PROMPTS_DIR, CONFIG_DIR } from './unlock.mjs';
-import { getStatus, applyLocal, applyEngine } from './security-unlock.mjs';
+import { detectRoots, allTargets, planFor, planForJson, loadPrompt, PROMPTS_DIR, CONFIG_DIR,
+  configDirForRoot, configDirsForRoots } from './unlock.mjs';
+import { getStatus, applyLocal, applyEngine, settingsPaths } from './security-unlock.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const STATE = process.env.WORKBUDDY_STATE_DIR || path.join(ROOT, '.state');
@@ -56,11 +57,25 @@ function jsonBytes(file, data) {
   const nl = fs.readFileSync(file, 'utf8').includes('\r\n') ? '\r\n' : '\n';
   return Buffer.from((JSON.stringify(data, null, 2) + '\n').replace(/\n/g, nl));
 }
+/**
+ * 将 roots 与各自的配置目录配对：[{ root, configDir }]。
+ * 未显式 --config 时，WorkBuddy -> ~/.workbuddy，WorkBuddyAI -> ~/.workbuddy-ai。
+ */
+function targetsFor(roots, options) {
+  if (options.config) return roots.map((root) => ({ root, configDir: options.config }));
+  return roots.map((root) => ({ root, configDir: configDirForRoot(root) }));
+}
+
+function configDirs(roots, options) {
+  if (options.config) return [options.config];
+  return configDirsForRoots(roots);
+}
 function plan(roots, options) {
   validatePrompts();
   const previousPrompts = history();
   const edits = [];
-  const targets = allTargets(roots);
+  const dirs = configDirs(roots, options);
+  const targets = allTargets(roots, { configDirs: dirs });
   if (!targets.length) throw error('NO_TARGETS', '安装目录中没有可处理的提示词文件');
   for (const t of targets) {
     let p;
@@ -75,24 +90,66 @@ function plan(roots, options) {
     if (p.raw !== p.text) edits.push({ file: t.file, bytes: Buffer.from(p.text), actions: p.actions });
   }
   if (options.security) {
-    checkManaged();
-    for (const file of [path.join(CONFIG_DIR, 'settings.json'), path.join(CONFIG_DIR, 'app', 'app-config.json')]) {
-      if (!fs.existsSync(file)) throw error('MISSING_CONFIG', `缺少安全配置，未写入: ${file}`);
-      readJson(file);
+    // 每个配置目录单独检查托管状态并写入，避免只放开其中一套。
+    // 显式指定的配置目录缺文件时报错；自动配对时目录不存在则跳过（该安装未使用）。
+    const explicitConfig = Boolean(options.config || process.env.WORKBUDDY_CONFIG_DIR);
+    for (const dir of dirs) {
+      checkManaged(dir);
+      for (const file of [path.join(dir, 'settings.json'), path.join(dir, 'app', 'app-config.json')]) {
+        if (!fs.existsSync(file)) {
+          if (explicitConfig) throw error('MISSING_CONFIG', `缺少安全配置，未写入: ${file}`);
+          continue;
+        }
+        readJson(file);
+      }
     }
-    const a = applyLocal({});
+    for (const dir of dirs) {
+      const { settings, appConfig } = settingsPaths(dir);
+      if (!fs.existsSync(settings) && !fs.existsSync(appConfig)) continue;
+      const a = applyLocal({ configDir: dir });
+      for (const e of a.edits) edits.push({ file: e.file,
+        bytes: e.raw === undefined ? jsonBytes(e.file, e.data) : Buffer.from(e.raw), actions: [e.what] });
+    }
     const b = applyEngine(roots, { withCredentials: false });
-    for (const e of [...a.edits, ...b.edits]) edits.push({ file: e.file,
+    for (const e of b.edits) edits.push({ file: e.file,
       bytes: e.raw === undefined ? jsonBytes(e.file, e.data) : Buffer.from(e.raw), actions: [e.what] });
   }
   return edits;
 }
-function checkManaged() {
-  const f = path.join(CONFIG_DIR, 'logs', 'main.log');
+function checkManaged(configDir = CONFIG_DIR) {
+  const f = path.join(configDir, 'logs', 'main.log');
   if (!fs.existsSync(f)) return;
   const matches = [...fs.readFileSync(f, 'utf8').slice(-200000).matchAll(/managed policy resolved managed=(true|false)/g)];
-  if (matches.at(-1)?.[1] === 'true') throw error('MANAGED_CLIENT', '企业托管配置不可用此工具更改');
+  if (matches.at(-1)?.[1] === 'true') throw error('MANAGED_CLIENT', `企业托管配置不可用此工具更改: ${configDir}`);
 }
+/**
+ * 列出所有发现的安装及其配对配置目录，供 UI 勾选。
+ */
+function allInstalls(options) {
+  return targetsFor(detectRoots(), options).map(({ root, configDir }) => ({
+    name: path.basename(root),
+    root,
+    configDir,
+    configExists: fs.existsSync(path.join(configDir, 'settings.json')),
+    promptTargets: allTargets([root], { configDirs: [configDir] }).length,
+  }));
+}
+
+/** 按 --install 过滤安装：优先目录名精确匹配，其次才做路径子串匹配。 */
+function selectRoots(roots, options) {
+  if (!options.install) return roots;
+  const wanted = options.install.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const picked = [];
+  for (const w of wanted) {
+    const exact = roots.filter((r) => path.basename(r).toLowerCase() === w);
+    if (exact.length) { for (const r of exact) if (!picked.includes(r)) picked.push(r); continue; }
+    // “WorkBuddy” 不能因此匹配 “WorkBuddyAI”，所以子串匹配只在无精确命中时用。
+    for (const r of roots) if (r.toLowerCase().includes(w) && !picked.includes(r)) picked.push(r);
+  }
+  if (!picked.length) throw error('INVALID_ARGUMENT', `--install 未匹配到已发现的安装: ${options.install}；可用: ${roots.map((r) => path.basename(r)).join(', ')}`);
+  return picked;
+}
+
 function processes(roots) {
   if (process.platform !== 'win32') return [];
   const script = "@(Get-CimInstance Win32_Process -Filter \"Name='WorkBuddy.exe' OR Name='WorkBuddyAI.exe'\" | Select-Object ProcessId,ExecutablePath) | ConvertTo-Json -Compress";
@@ -204,16 +261,27 @@ function restore(options, roots) {
   });
 }
 function run(command, options) {
-  const roots = detectRoots();
+  // --install 只处理勾选的安装（按目录名或路径子串匹配），默认全部。
+  const roots = selectRoots(detectRoots(), options);
   if (command === 'prompts') return { directory: PROMPTS_DIR, files: names.map((name) => ({ name, path: path.join(PROMPTS_DIR, name), editable: !name.endsWith('.old.txt') })) };
   if (command === 'init') return withLock(() => { validatePrompts(); recordPrompts(); return { initialized: true }; });
   if (command === 'backups') return { backups: manifests().map(({ dir, entries, ...m }) => ({ ...m, count: entries.length })) };
+  if (command === 'installs') return { installs: allInstalls(options) };
   if (!roots.length) throw error('NOT_INSTALLED', '未找到安装目录；使用 --root "D:\\Program Files\\WorkBuddy" 指定');
   if (command === 'restore') return restore(options, roots);
   const inspect = () => {
     const edits = plan(roots, options);
-    const s = getStatus();
-    return { roots, promptDirectory: PROMPTS_DIR, targetCount: allTargets(roots).length,
+    const dirs = configDirs(roots, options);
+    const s = getStatus(dirs[0] ?? CONFIG_DIR);
+    const installs = targetsFor(roots, options).map(({ root, configDir }) => ({
+      name: path.basename(root),
+      root,
+      configDir,
+      configExists: fs.existsSync(path.join(configDir, 'settings.json')) || fs.existsSync(path.join(configDir, 'app', 'app-config.json')),
+      promptTargets: allTargets([root], { configDirs: [configDir] }).length,
+    }));
+    return { roots, installs, promptDirectory: PROMPTS_DIR,
+      targetCount: allTargets(roots, { configDirs: dirs }).length,
       pendingChanges: edits.length, changes: edits.map(({ bytes, ...e }) => e),
       security: { sandboxSafetyEnabled: s.sandboxSafetyEnabled ?? null, fileRules: s.fileRules,
         commandRules: s.commandRules, networkRules: s.networkRules,
@@ -248,16 +316,18 @@ const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
 const value = (name) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 // Environment options are set before imports only when supplied by the tiny launcher below.
-const options = { security: flag('security'), close: flag('close'), restart: flag('restart'), noRestart: flag('no-restart'), dryRun: flag('dry-run'), backup: value('backup') };
+const options = { security: flag('security'), close: flag('close'), restart: flag('restart'), noRestart: flag('no-restart'), dryRun: flag('dry-run'), backup: value('backup'), install: value('install'), config: value('config') };
 try {
   const allowed = new Set(['--json', '--security', '--close', '--restart', '--no-restart', '--dry-run']);
-  for (const a of args.filter((a) => a.startsWith('-'))) if (!allowed.has(a) && !/^--backup=/.test(a)) throw error('INVALID_ARGUMENT', `未知参数: ${a}`);
+  for (const a of args.filter((a) => a.startsWith('-'))) if (!allowed.has(a) && !/^--(backup|install|config)=/.test(a)) throw error('INVALID_ARGUMENT', `未知参数: ${a}`);
   if (command === 'help' || command === '--help') {
-    const data = { commands: ['status', 'preview', 'apply', 'verify', 'restore', 'prompts', 'backups', 'init'],
-      examples: ['node wb.mjs status --json', 'node wb.mjs apply --close --restart --json',
+    const data = { commands: ['status', 'preview', 'apply', 'verify', 'restore', 'prompts', 'backups', 'installs', 'init'],
+      examples: ['node wb.mjs status --json', 'node wb.mjs installs --json',
+        'node wb.mjs apply --install=WorkBuddy --close --restart --json',
+        'node wb.mjs apply --close --restart --json',
         'node wb.mjs apply --security --close --restart --json', 'node wb.mjs restore --close --json'],
-      flags: ['--root=PATH', '--config=PATH', '--json', '--security', '--close', '--restart', '--no-restart', '--dry-run', '--backup=ID'],
-      notes: '默认完整同步提示词；--security 可选更改本地安全配置，保留凭据检测；restore 撤销最近一次一键应用，不声称恢复官方原版。' };
+      flags: ['--install=NAME', '--root=PATH', '--config=PATH', '--json', '--security', '--close', '--restart', '--no-restart', '--dry-run', '--backup=ID'],
+      notes: '默认处理全部安装及各自配置目录；--install 只处理勾选的安装（WorkBuddy / WorkBuddyAI，逗号分隔）；--security 可选更改本地安全配置，保留凭据检测；restore 撤销最近一次一键应用，不声称恢复官方原版。' };
     console.log(json ? JSON.stringify({ ok: true, data }) : JSON.stringify(data, null, 2));
   } else {
     const data = run(command, options);

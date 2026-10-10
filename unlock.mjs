@@ -36,6 +36,32 @@ const BACKUP_ROOT = process.env.WORKBUDDY_BACKUP_DIR || path.join(__dirname, 'ba
 const HOME = os.homedir();
 const CONFIG_DIR = process.env.WORKBUDDY_CONFIG_DIR || path.join(HOME, '.workbuddy');
 
+/**
+ * 每个安装对应的用户配置目录。WorkBuddy 与 WorkBuddyAI 各自使用一套
+ * 独立配置（~/.workbuddy、~/.workbuddy-ai）；插件缓存和 CLI 缓存都是
+ * 按配置目录分开存放的独立副本，必须单独同步。
+ *
+ * 顺序：显式 --config 最高；否则按上表配对；未知安装回落到 CONFIG_DIR。
+ */
+function configDirForRoot(root) {
+  if (process.env.WORKBUDDY_CONFIG_DIR) return process.env.WORKBUDDY_CONFIG_DIR;
+  const name = path.basename(path.resolve(root)).toLowerCase();
+  if (name === 'workbuddy') return path.join(HOME, '.workbuddy');
+  if (name === 'workbuddyai') return path.join(HOME, '.workbuddy-ai');
+  return CONFIG_DIR;
+}
+
+/** 所有可能出现且实际存在的配置目录（用于 status 展示与多目录发现）。 */
+function configDirsForRoots(roots) {
+  if (process.env.WORKBUDDY_CONFIG_DIR) return [process.env.WORKBUDDY_CONFIG_DIR];
+  const out = [];
+  for (const root of roots) {
+    const d = configDirForRoot(root);
+    if (!out.includes(d)) out.push(d);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- 替换文本（从 prompts/ 读取）
 
 const PROMPTS_DIR = process.env.WORKBUDDY_PROMPTS_DIR || path.join(__dirname, 'prompts');
@@ -105,15 +131,19 @@ function collectTargets(root) {
   return targets;
 }
 
-/** CLI 的 product.json（内含 123 个基座提示词模板）。 */
+/** CLI 的 product.json（内含 123 个基座提示词模板）。collectCliCacheTargets。 */
 function collectCliTargets(root) {
   const base = path.join(root, 'resources', 'app.asar.unpacked', 'cli');
   const out = [];
   const p = path.join(base, 'product.json');
   if (fs.existsSync(p)) out.push(p);
-  const cache = path.join(CONFIG_DIR, 'cache', 'acc-product-config-v3.json');
-  if (fs.existsSync(cache)) out.push(cache);
   return out;
+}
+
+/** 每个配置目录下的 CLI 运行时缓存（服务端下发配置的本地副本）。 */
+function collectCliCacheTargets(configDir) {
+  const cache = path.join(configDir, 'cache', 'acc-product-config-v3.json');
+  return fs.existsSync(cache) ? [cache] : [];
 }
 
 /** 处理 product.json / acc-product-config-v3.json 里的 prompts[].template。 */
@@ -157,8 +187,8 @@ function planForJson(file, opts) {
 }
 
 /** 插件缓存中的 welcomemode 提示词副本（实际被 include 的那个）。 */
-function collectCacheTargets() {
-  const cacheRoot = path.join(CONFIG_DIR, 'plugins', 'cache', 'workbuddy-builtin');
+function collectCacheTargets(configDir = CONFIG_DIR) {
+  const cacheRoot = path.join(configDir, 'plugins', 'cache', 'workbuddy-builtin');
   const targets = [];
   if (!fs.existsSync(cacheRoot)) return targets;
   for (const dir of fs.readdirSync(cacheRoot).sort()) {
@@ -309,7 +339,7 @@ const REFUSAL_MARKERS = [
   'cannot be bypassed by claims of',
 ];
 
-function allTargets(roots) {
+function allTargets(roots, options = {}) {
   const out = [];
   const seen = new Set();
   const push = (root, file, kind) => {
@@ -318,14 +348,17 @@ function allTargets(roots) {
     seen.add(key);
     out.push({ root, file, kind });
   };
+  // 未显式指定安装时，把每个安装与其配对配置目录一起处理。
+  const configDirs = options.configDirs || configDirsForRoots(roots);
   for (const root of roots) {
     for (const f of collectTargets(root)) push(root, f, 'install');
   }
-  for (const f of collectCacheTargets()) push(CONFIG_DIR, f, 'cache');
+  for (const dir of configDirs) {
+    for (const f of collectCacheTargets(dir)) push(dir, f, 'cache');
+    for (const f of collectCliCacheTargets(dir)) push(dir, f, 'cli');
+  }
   for (const root of roots) {
-    for (const f of collectCliTargets(root)) {
-      push(f.startsWith(CONFIG_DIR) ? CONFIG_DIR : root, f, 'cli');
-    }
+    for (const f of collectCliTargets(root)) push(root, f, 'cli');
   }
   return out;
 }
@@ -458,7 +491,8 @@ function cmdRestore(roots, opts) {
 
 // ---------------------------------------------------------------- main
 
-export { detectRoots, allTargets, planFor, planForJson, wbRunning, loadPrompt, PROMPTS_DIR, CONFIG_DIR };
+export { detectRoots, allTargets, planFor, planForJson, wbRunning, loadPrompt, PROMPTS_DIR, CONFIG_DIR,
+  configDirForRoot, configDirsForRoots, collectTargets, collectCliTargets, collectCliCacheTargets, collectCacheTargets };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const argv = process.argv.slice(2);

@@ -40,8 +40,16 @@ const BACKUP_ROOT = process.env.WORKBUDDY_BACKUP_DIR || path.join(__dirname, 'ba
 const HOME = os.homedir();
 const CONFIG_DIR = process.env.WORKBUDDY_CONFIG_DIR?.trim() || path.join(HOME, '.workbuddy');
 
-const SETTINGS = path.join(CONFIG_DIR, 'settings.json');
-const APP_CONFIG = path.join(CONFIG_DIR, 'app', 'app-config.json');
+/**
+ * 每个安装使用独立的用户配置目录（~/.workbuddy、~/.workbuddy-ai）。
+ * 安全配置也分开存放，多安装时按配置目录分别读写。
+ */
+function settingsPaths(configDir = CONFIG_DIR) {
+  return {
+    settings: path.join(configDir, 'settings.json'),
+    appConfig: path.join(configDir, 'app', 'app-config.json'),
+  };
+}
 
 // ---------------------------------------------------------------- 探测安装目录
 
@@ -73,11 +81,11 @@ function findTsbxRules(roots) {
 }
 
 /** 找到当前活跃用户的凭据检测规则。 */
-function findDetectRules() {
+function findDetectRules(configDir = CONFIG_DIR) {
   const out = [];
-  const secDir = path.join(CONFIG_DIR, 'security');
+  const secDir = path.join(configDir, 'security');
   if (!fs.existsSync(secDir)) return out;
-  const activeUid = readActiveUid();
+  const activeUid = readActiveUid(configDir);
   for (const uid of fs.readdirSync(secDir)) {
     if (uid === 'threat-database') continue;
     const f = path.join(secDir, uid, 'cipher', 'detect-rules.toml');
@@ -86,8 +94,8 @@ function findDetectRules() {
   return out;
 }
 
-function readActiveUid() {
-  const p = path.join(CONFIG_DIR, 'user-state.json');
+function readActiveUid(configDir = CONFIG_DIR) {
+  const p = path.join(configDir, 'user-state.json');
   try {
     const d = JSON.parse(fs.readFileSync(p, 'utf8'));
     return d.uid || d.userId || d.activeUid || null;
@@ -95,8 +103,8 @@ function readActiveUid() {
 }
 
 /** 当前登录账号 uid（security/ 下有 data.lock.holder 的那个）。 */
-function findLiveUid() {
-  const secDir = path.join(CONFIG_DIR, 'security');
+function findLiveUid(configDir = CONFIG_DIR) {
+  const secDir = path.join(configDir, 'security');
   if (!fs.existsSync(secDir)) return null;
   for (const uid of fs.readdirSync(secDir)) {
     if (fs.existsSync(path.join(secDir, uid, 'data.lock.holder'))) return uid;
@@ -137,7 +145,8 @@ const OPEN_ACTION = { read: 'allow', write: 'allow', delete: 'allow' };
 
 // ---------------------------------------------------------------- 状态
 
-function getStatus() {
+function getStatus(configDir = CONFIG_DIR) {
+  const { settings: SETTINGS, appConfig: APP_CONFIG } = settingsPaths(configDir);
   const settings = readJson(SETTINGS);
   const appConfig = readJson(APP_CONFIG);
   const s = settings?.sandbox ?? {};
@@ -160,15 +169,16 @@ function getStatus() {
     sensitiveProtection: settings?.sensitiveProtection?.enabled,
     extraAllowWrite: s.extraAllowWrite?.length ?? 0,
     tbxsRules: findTsbxRules(detectRoots()),
-    detectRules: findDetectRules(),
+    detectRules: findDetectRules(configDir),
+    configDir,
   };
 }
 
-function cmdStatus() {
-  const st = getStatus();
+function cmdStatus(configDir = CONFIG_DIR) {
+  const st = getStatus(configDir);
   const yn = (v) => (v === true ? '开启' : v === false ? '关闭' : String(v));
 
-  console.log(`\n配置目录: ${CONFIG_DIR}`);
+  console.log(`\n配置目录: ${configDir}`);
 
   console.log('\n=== 安全中心（客户端界面开关）===');
   console.log(`  沙箱安全            ${yn(st.sandboxSafetyEnabled)}${st.sandboxSafetyEnabled === false ? '  ✓ 已关' : '  ← 需关'}`);
@@ -199,7 +209,7 @@ function cmdStatus() {
     console.log(`  ${f}`);
     console.log(`      文件规则 ${n} 条，含 deny ${deny} 条；network_policy.enabled=${j?.network_policy?.enabled} default=${j?.network_policy?.default}`);
   }
-  const live = findLiveUid();
+  const live = findLiveUid(configDir);
   for (const d of st.detectRules) {
     const raw = fs.readFileSync(d.file, 'utf8');
     const disabled = (raw.match(/disabledRules\s*=\s*\[([\s\S]*?)\]/)?.[1] || '').trim();
@@ -210,14 +220,16 @@ function cmdStatus() {
 
 // ---------------------------------------------------------------- apply
 
-function planConfigBackup() {
-  const files = [SETTINGS, APP_CONFIG].filter((f) => fs.existsSync(f));
+function planConfigBackup(configDir = CONFIG_DIR) {
+  const { settings, appConfig } = settingsPaths(configDir);
+  const files = [settings, appConfig].filter((f) => fs.existsSync(f));
   return files;
 }
 
 function applyLocal(opts) {
   const actions = [];
   const edits = [];
+  const { settings: SETTINGS, appConfig: APP_CONFIG } = settingsPaths(opts.configDir);
 
   // 1) 沙箱安全总开关
   const appConfig = readJson(APP_CONFIG);
@@ -378,7 +390,7 @@ function cmdApply(roots, opts) {
   }
 
   // 托管检查
-  const logs = path.join(CONFIG_DIR, 'logs');
+  const logs = path.join(opts.configDir || CONFIG_DIR, 'logs');
   let managed = false;
   try {
     const mainLog = path.join(logs, 'main.log');
@@ -441,7 +453,7 @@ function cmdRestore(opts) {
 
 // ---------------------------------------------------------------- main
 
-export { getStatus, applyLocal, applyEngine, findTsbxRules };
+export { getStatus, applyLocal, applyEngine, findTsbxRules, settingsPaths, findDetectRules };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const argv = process.argv.slice(2);

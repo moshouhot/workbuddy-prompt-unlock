@@ -73,12 +73,25 @@ Release 包**已内置** `tools/node_modules`，不需要 `npm install`，也不
 ```cmd
 node wb.mjs status --json
 node wb.mjs preview --json
+node wb.mjs installs --json
 node wb.mjs apply --close --restart --json
+node wb.mjs apply --install=WorkBuddy --close --restart --json
 node wb.mjs verify --json
 node wb.mjs restore --close --restart --json
 node wb.mjs prompts --json
 node wb.mjs backups --json
 ```
+
+### 两套安装与独立配置目录
+
+WorkBuddy 与 WorkBuddyAI 各有**自己的用户配置目录**，插件缓存和 CLI 缓存都按配置分开存放，因此必须分别同步：
+
+| 安装 | 版本（本机实测） | 配置目录 |
+|---|---|---|
+| `WorkBuddy`（国内版） | 5.7.7 | `~/.workbuddy` |
+| `WorkBuddyAI` | 5.7.6 | `~/.workbuddy-ai` |
+
+只改其中一个安装时，另一个的插件缓存副本会保持原样。界面默认**只勾选 WorkBuddy**，需要时自行勾选 WorkBuddyAI；CLI 用 `--install` 达成同样效果。`node wb.mjs installs --json` 会列出每个安装及其配对配置目录。
 
 可选安全配置：
 
@@ -93,8 +106,9 @@ node wb.mjs verify --security --json
 | 参数 | 说明 |
 |---|---|
 | `--json` | stdout 只输出一个 JSON 对象，不混入日志 |
+| `--install=NAME` | 只处理指定安装（`WorkBuddy` / `WorkBuddyAI`，逗号分隔）。**目录名精确匹配优先**，所以 `--install=WorkBuddy` 不会误匹配 `WorkBuddyAI` |
 | `--root=PATH` 或 `--root PATH` | 仅操作指定安装；默认发现常见安装位置与两套 WorkBuddy 安装 |
-| `--config=PATH` | 指定配置/插件缓存目录，默认 `~/.workbuddy` |
+| `--config=PATH` | 指定配置/插件缓存目录；默认按安装自动配对（见下表） |
 | `--close` | 同意自动关闭发现的安装中的 WorkBuddy 进程；不指定时，运行中的客户端导致拒绝写入 |
 | `--restart` | 完成后启动客户端；原先运行的客户端默认会恢复启动 |
 | `--no-restart` | 操作完成后不启动客户端 |
@@ -150,12 +164,16 @@ CLI 不替 AI 作专业判断；只负责发现目标、校验、备份、机械
 
 1. `<安装>/resources/app.asar.unpacked/resources/templates/*.tpl`
 2. `.../plugins/workbuddy-builtin/welcomemode/{code,work,design}/prompt.tpl`
-3. `~/.workbuddy/plugins/cache/workbuddy-builtin/welcomemode-*/<版本>/prompt.tpl`（实际 include 的独立副本）
-4. `<安装>/resources/app.asar.unpacked/cli/product.json` 与 `~/.workbuddy/cache/acc-product-config-v3.json` 的 `prompts[].template`
+3. `<配置目录>/plugins/cache/workbuddy-builtin/welcomemode-*/<版本>/prompt.tpl`（实际 include 的独立副本）
+4. `<安装>/resources/app.asar.unpacked/cli/product.json` 与 `<配置目录>/cache/acc-product-config-v3.json` 的 `prompts[].template`
+
+第 3、4 项对**每个配置目录**各处理一次，所以 `targetCount` 会随发现的安装数量增加（两套安装为 54）。
 
 模板保留非目标区块；JSON 只改目标提示词字段。写入前编译 Nunjucks 语法，写入后检查字节和是否仍有待同步内容。
 
 WorkBuddy 升级可能覆盖这些文件，**升级后再次一键应用**。不承诺跨未来版本始终兼容；发现不支持的说明段会停止并报错。
+
+官方升级会重新解包并改变非目标区块，这是正常现象；回归工具以**每个文件最新一次备份**为基线，不会把升级差异报成异常。
 
 ## 开发与验证
 

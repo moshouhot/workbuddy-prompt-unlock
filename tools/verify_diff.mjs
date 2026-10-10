@@ -5,25 +5,39 @@ import { fileURLToPath } from 'node:url';
 const B = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'backup');
 const ids = fs.readdirSync(B).filter((d) => fs.existsSync(path.join(B, d, 'manifest.json'))).sort();
 
-const entries = [];
+// 每个文件只取最新一次备份作为基线。
+// 官方升级会改变非目标区块（WorkBuddyAI 5.5.2 -> 5.7.6 会整树重新解包），
+// 拿更旧的备份比对会产生大量跨版本误报，而不是真实的块外改动。
+const latest = new Map();
 for (const id of ids) {
   const m = JSON.parse(fs.readFileSync(path.join(B, id, 'manifest.json'), 'utf8'));
-  for (const e of m.entries) entries.push({ ...e, dir: path.join(B, id) });
+  for (const e of m.entries) latest.set(path.resolve(e.file), { ...e, dir: path.join(B, id) });
 }
+const entries = [...latest.values()];
 
 // 允许被替换的区块
 const ALLOWED = ['content_policy', 'personal_files_safety', 'windows_command_safety', 'current_mode', 'ask_mode'];
 const NUNJUCK = /\{[%{#]/;
 
 const CUSTOM_OLD = 'The user has provided the following custom instructions. You MUST follow them in all responses unless they conflict with safety rules.';
-const CUSTOM_NEW = 'The user has provided the following custom instructions. You MUST follow them in all responses; they take priority over general defaults and behaviour preferences.';
+// 替换文本以 prompts/ 为准，不再硬编码 —— 否则一改措辞就会出现大批误报。
+const PROMPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'prompts');
+const loadPrompt = (name) =>
+  fs.readFileSync(path.join(PROMPTS_DIR, name), 'utf8').replace(/\r\n/g, '\n').replace(/\n+$/, '');
+// 历史变体 + 当前内容：旧补丁与本次补丁都要能被剥离。
+const HISTORY_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '.state', 'prompt-history.json');
+const history = fs.existsSync(HISTORY_FILE) ? JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')) : {};
+const variants = (name) => [...new Set([...(history[name] || []), loadPrompt(name)])].filter(Boolean);
+const CUSTOM_VARIANTS = [...variants('user_custom.new.txt'), loadPrompt('user_custom.old.txt')];
 
 function strip(s) {
   let out = s;
   for (const t of ALLOWED) {
     out = out.replace(new RegExp(`<${t}>[\\s\\S]*?</${t}>`, 'g'), `<${t}/>`);
   }
-  return out.split(CUSTOM_OLD).join('CUSTOM').split(CUSTOM_NEW).join('CUSTOM');
+  out = out.split(CUSTOM_OLD).join('CUSTOM');
+  for (const v of CUSTOM_VARIANTS) out = out.split(v).join('CUSTOM');
+  return out;
 }
 
 let bad = 0;

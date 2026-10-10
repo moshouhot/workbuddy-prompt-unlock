@@ -21,6 +21,26 @@ public sealed record PromptFile(string Name, string Path)
         _ => Name
     } + "  ·  " + Name;
 }
+
+/// <summary>一个可勾选的 WorkBuddy 安装及其配对的用户配置目录。</summary>
+public sealed class InstallTarget : INotifyPropertyChanged
+{
+    private bool selected;
+    public event PropertyChangedEventHandler? PropertyChanged;
+    public required string Name { get; init; }
+    public required string Root { get; init; }
+    public required string ConfigDir { get; init; }
+    public required bool ConfigExists { get; init; }
+    public bool Selected
+    {
+        get => selected;
+        set { if (selected == value) return; selected = value; PropertyChanged?.Invoke(this, new(nameof(Selected))); }
+    }
+    /// <summary>用户看到的说明：安装名 + 配置目录是否有独立安全配置。</summary>
+    public string Label => ConfigExists
+        ? $"{Name}  ·  {Root}"
+        : $"{Name}  ·  {Root}（无独立配置目录）";
+}
 public sealed class UiCommand(Func<Task> execute, Func<bool> canExecute) : ICommand
 {
     public event EventHandler? CanExecuteChanged;
@@ -36,6 +56,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private PromptFile? selectedPrompt;
     public event PropertyChangedEventHandler? PropertyChanged;
     public ObservableCollection<PromptFile> PromptFiles { get; } = [];
+    /// <summary>发现的安装列表；默认只勾选 WorkBuddy（国内版）。</summary>
+    public ObservableCollection<InstallTarget> Installs { get; } = [];
     public bool IsIdle => !busy;
     public bool IncludeSecurity { get => includeSecurity; set { includeSecurity = value; Notify(); } }
     public string Status { get => status; private set { status = value; Notify(); } }
@@ -51,21 +73,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public MainViewModel(CliService cli)
     {
         service = cli;
-        ApplyCommand = new(() => RunAsync("apply"), () => IsIdle);
-        PreviewCommand = new(() => RunAsync("preview"), () => IsIdle);
+        ApplyCommand = new(() => RunAsync("apply"), () => IsIdle && !HasNoInstallSelected);
+        PreviewCommand = new(() => RunAsync("preview"), () => IsIdle && !HasNoInstallSelected);
         RestoreCommand = new(() => RunAsync("restore"), () => IsIdle && hasBackup);
         EditCommand = new(() => SafeAction(() => service.EditFile(SelectedPrompt!.Path)), () => IsIdle && SelectedPrompt != null);
         FolderCommand = new(() => SafeAction(service.OpenFolder), () => IsIdle);
     }
     private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new(name));
-    private void RefreshCommands() { foreach (var c in Commands) c.Refresh(); }
+    private void RefreshCommands() { Notify(nameof(HasNoInstallSelected)); foreach (var c in Commands) c.Refresh(); }
     private void SetBusy(bool value) { busy = value; Notify(nameof(IsIdle)); RefreshCommands(); }
     private Task SafeAction(Action action)
     {
         try { action(); } catch (Exception e) { Status = "操作失败"; Log = e.Message; }
         return Task.CompletedTask;
     }
-    private string[] Flags(bool mutate) => [.. (IncludeSecurity ? new[] { "--security" } : Array.Empty<string>()), .. (mutate ? new[] { "--close", "--restart" } : Array.Empty<string>())];
+    private string[] Flags(bool mutate)
+    {
+        var list = new List<string>();
+        var chosen = Installs.Where(i => i.Selected).Select(i => i.Name).ToList();
+        // 未勾选任何安装时不做任何写入，避免 --install= 被误解释为“全部”。
+        if (Installs.Count > 0 && chosen.Count == 0) throw new InvalidOperationException("请至少勾选一个目标安装。");
+        if (Installs.Count > 0) list.Add($"--install={string.Join(",", chosen)}");
+        if (IncludeSecurity) list.Add("--security");
+        if (mutate) { list.Add("--close"); list.Add("--restart"); }
+        return [.. list];
+    }
     public async Task InitializeAsync()
     {
         SetBusy(true);
@@ -75,6 +107,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             foreach (var f in list.GetProperty("files").EnumerateArray()) if (f.GetProperty("editable").GetBoolean())
                 PromptFiles.Add(new(f.GetProperty("name").GetString()!, f.GetProperty("path").GetString()!));
             SelectedPrompt = PromptFiles.FirstOrDefault(p => p.Name == "personal_files_safety.txt");
+            await LoadInstallsAsync();
             await RefreshStatusAsync();
             Log = "准备就绪。先保存 WorkBuddy 中的工作，再点击“一键应用”。\n编辑提示词：选择文件 → 编辑 → 保存 → 一键应用。";
         }
@@ -90,6 +123,30 @@ public sealed class MainViewModel : INotifyPropertyChanged
         hasBackup = data.GetProperty("latestBackup").ValueKind != JsonValueKind.Null;
         RefreshCommands();
     }
+
+    /// <summary>首次加载安装列表：默认只勾选 WorkBuddy（国内版），AI 版留给用户主动选择。</summary>
+    private async Task LoadInstallsAsync()
+    {
+        var data = await service.RunAsync("installs");
+        Installs.Clear();
+        foreach (var i in data.GetProperty("installs").EnumerateArray())
+        {
+            var name = i.GetProperty("name").GetString()!;
+            var target = new InstallTarget
+            {
+                Name = name,
+                Root = i.GetProperty("root").GetString()!,
+                ConfigDir = i.GetProperty("configDir").GetString()!,
+                ConfigExists = i.GetProperty("configExists").GetBoolean(),
+                Selected = name.Equals("WorkBuddy", StringComparison.OrdinalIgnoreCase),
+            };
+            target.PropertyChanged += (_, _) => RefreshCommands();
+            Installs.Add(target);
+        }
+        if (Installs.Count > 0 && !Installs.Any(i => i.Selected)) Installs[0].Selected = true;
+    }
+
+    public bool HasNoInstallSelected => Installs.Count > 0 && !Installs.Any(i => i.Selected);
     private async Task RunAsync(string command)
     {
         if (!IsIdle) return;
