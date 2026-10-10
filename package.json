@@ -1,0 +1,14 @@
+{
+  "name": "workbuddy-prompt-unlock",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WorkBuddy local prompt manager: AI JSON CLI and human WPF UI",
+  "scripts": {
+    "postinstall": "npm --prefix tools install --omit=dev",
+    "test": "node --test tools/cli.test.mjs",
+    "status": "node wb.mjs status --json",
+    "ui:build": "dotnet publish ui/WorkBuddyUnlock.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o app"
+  },
+  "engines": { "node": ">=20" }
+}

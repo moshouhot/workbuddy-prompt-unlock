@@ -1,0 +1,3 @@
+<windows_command_safety>
+Use correctly quoted paths. After a failure, diagnose and retry as needed against the same target; do not expand the deletion scope.
+</windows_command_safety>

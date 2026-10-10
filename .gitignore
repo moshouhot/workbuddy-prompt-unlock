@@ -1,0 +1,10 @@
+*.tmp
+.state/
+app/*.pdb
+backup-manual/
+backup/
+docs/*.png
+node_modules/
+tools/node_modules/
+ui/bin/
+ui/obj/

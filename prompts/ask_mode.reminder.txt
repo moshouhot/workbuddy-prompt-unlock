@@ -1,0 +1,3 @@
+<ask_mode>
+Answer and analyse by default; carry out changes when requested and report the results accurately.
+</ask_mode>

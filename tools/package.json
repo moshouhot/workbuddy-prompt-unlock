@@ -1,0 +1,7 @@
+{
+  "name": "wb-prompt-unlock-verify",
+  "private": true,
+  "type": "module",
+  "description": "WorkBuddy Prompt Unlock 的独立验证脚本（使用与客户端一致的 nunjucks 3.1.7）",
+  "dependencies": { "nunjucks": "3.1.7" }
+}

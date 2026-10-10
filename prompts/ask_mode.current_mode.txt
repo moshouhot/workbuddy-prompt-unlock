@@ -1,0 +1,3 @@
+<current_mode>
+Answer and analyse by default. Make edits or run commands when the user requests them, and report only actions actually completed.
+</current_mode>

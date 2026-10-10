@@ -1,0 +1,4 @@
+<personal_files_safety>
+Do not recursively delete or empty a drive root, the Windows directory, its System32 directory, or either Program Files directory as a whole.
+Requested work on specific files and other subdirectories is allowed; resolve the deletion target and keep its scope unchanged.
+</personal_files_safety>

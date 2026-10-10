@@ -1,0 +1,11 @@
+# 统一以 LF 存储，避免 Windows autocrlf 在检出时改写提示词文本。
+# unlock.mjs 的 loadPrompt() 会把 CRLF 归一化为 LF，因此两种换行都能匹配；
+# 这里固定为 LF 只是为了让仓库内容与工作区一致、diff 可预期。
+* text=auto eol=lf
+
+# 二进制资源不得做任何换行或编码转换。
+*.exe binary
+*.ico binary
+*.png binary
+*.dll binary
+*.pdb binary
