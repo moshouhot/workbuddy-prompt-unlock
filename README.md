@@ -4,6 +4,38 @@
 
 仅处理本地客户端文件；不改变模型能力、服务端审核或账号权限。**不修改、不重新打包 `app.asar`**。
 
+## 获取与首次运行
+
+仓库是私有的，需要先获得访问权限（由仓库所有者邀请为协作者，或使用有权限的账号）。
+
+```cmd
+git clone https://github.com/moshouhot/workbuddy-prompt-unlock.git
+cd workbuddy-prompt-unlock
+npm install
+```
+
+`npm install` 是**必需**的：它会安装 `tools/node_modules/nunjucks`，用于在写入前做模板语法校验。跳过这步时任何命令都会直接返回 `INITIALIZATION_FAILED`（`Cannot find module './tools/node_modules/nunjucks'`）。该目录不入库，所以每次全新 clone 都要装一次。
+
+安装后先做只读检查，确认能发现你的安装：
+
+```cmd
+node wb.mjs status --json
+```
+
+看到 `roots` 列出你的 WorkBuddy 安装路径、`targetCount` 大于 0，即可继续。没发现安装时用 `--root` 指定：
+
+```cmd
+node wb.mjs status --root="D:\Program Files\WorkBuddy" --json
+```
+
+准备条件：Windows 10/11 x64、Node.js LTS（需 `node` 在 PATH 中）、GUI 另需 .NET 8 Desktop Runtime x64。
+
+### 用 Release 包（推荐给不熟悉命令行的用户）
+
+在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-<版本>.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），然后**仍需**在解压目录运行一次 `npm install`——压缩包同样不含 `node_modules`，以避免体积膨胀与依赖过时。
+
+解压后双击 `UI.vbs` 即可。
+
 ## 人使用：一键完成
 
 双击 **`UI.vbs`**（或 `app/WorkBuddyUnlock.exe`），不弹命令行窗口。
@@ -28,7 +60,7 @@
 - Windows 10/11 x64
 - Node.js LTS（本机测试 Node 24.13.0），`node` 在 PATH 中
 - .NET 8 Desktop Runtime x64（仅 GUI 需要）
-- 保持项目目录完整，尤其是 `prompts/` 和 `tools/node_modules/nunjucks`。没有依赖时在项目根目录运行 `npm install`。
+- 保持项目目录完整，尤其是 `prompts/`。首次使用必须先运行 `npm install` 安装 `tools/node_modules/nunjucks`。
 
 界面 EXE 不是整个工具的单文件封装；它调用同目录项目中的 CLI。无需安装 Python、Electron 或启动 Web 服务。
 
