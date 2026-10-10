@@ -46,6 +46,8 @@ Release 包**已内置** `tools/node_modules`，不需要 `npm install`，也不
 2. 点击 **一键应用**：校验提示词 → 关闭客户端 → 备份 → 同步 → 校验 → 重启。
 3. 如需一起处理之前的安全配置，勾选 **同时放开本地安全配置**。默认不改变安全开关现状，也不会自动恢复已关闭的开关。
 
+**允许完全访问**默认开启，不依赖上面的安全配置勾选：它把新任务的默认权限模式设为“允许完全访问”，减少逐条确认。存储在 `<配置目录>/storage/user-<uid>-personal/global/preferences.json` 的 `localTaskPermissionMode`（`full-access` / `default-sandbox`）。只改已登录账号的偏好文件，保留同文件里的主题、语言等字段；没有账号目录时不会新建。CLI 用 `--no-full-access` 可关闭。
+
 顶部橙色提示条常驻提醒：**WorkBuddy 升级后要回来重新“一键应用”**。升级会重新解包并覆盖模板、换掉旧版本插件缓存，改动会失效。
 
 界面还能：
@@ -120,6 +122,17 @@ node wb.mjs verify --security --json
 | `--dry-run` | apply/restore 只预览，不关闭客户端、不写入 |
 | `--backup=ID` | 撤销指定的统一 apply 备份 |
 | `--security` | 同时应用/检查本地安全配置，默认不动 |
+| `--no-full-access` | 不修改“允许完全访问”权限偏好（默认会开启） |
+
+### “允许完全访问”
+
+指新任务的默认权限模式，对应界面输入框上方的同名开关。它决定新任务是否逐条请求确认，与沙箱规则、提示词是三个独立层面：
+
+- 存储：`<配置目录>/storage/user-<uid>-personal/global/preferences.json` 的 `localTaskPermissionMode`
+- 取值：`full-access`（开）/ `default-sandbox`（关，客户端默认值）
+- 工具行为：`apply` 时**默认开启**（无需 `--security`）；只改已存在的偏好文件，不新建账号目录，并保留主题、语言等其他字段
+
+`status`/`verify` 的 `security.fullAccess` 会报告当前状态（`true` / `false` / `"mixed"` 表示部分账号未开 / `null` 表示尚无偏好文件）。
 
 成功示例：
 

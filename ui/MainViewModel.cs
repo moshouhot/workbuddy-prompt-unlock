@@ -51,7 +51,7 @@ public sealed class UiCommand(Func<Task> execute, Func<bool> canExecute) : IComm
 public sealed class MainViewModel : INotifyPropertyChanged
 {
     private readonly CliService service;
-    private bool busy, includeSecurity, hasBackup;
+    private bool busy, includeSecurity = false, fullAccess = true, hasBackup;
     private string status = "正在检查客户端…", log = "", installSummary = "";
     private PromptFile? selectedPrompt;
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -60,6 +60,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ObservableCollection<InstallTarget> Installs { get; } = [];
     public bool IsIdle => !busy;
     public bool IncludeSecurity { get => includeSecurity; set { includeSecurity = value; Notify(); } }
+    /// <summary>允许完全访问：新任务不再逐条确认。默认开启，不依赖“安全配置”勾选。</summary>
+    public bool FullAccess { get => fullAccess; set { fullAccess = value; Notify(); } }
     public string Status { get => status; private set { status = value; Notify(); } }
     public string InstallSummary { get => installSummary; private set { installSummary = value; Notify(); } }
     public string Log { get => log; private set { log = value; Notify(); } }
@@ -95,6 +97,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (Installs.Count > 0 && chosen.Count == 0) throw new InvalidOperationException("请至少勾选一个目标安装。");
         if (Installs.Count > 0) list.Add($"--install={string.Join(",", chosen)}");
         if (IncludeSecurity) list.Add("--security");
+        if (!FullAccess) list.Add("--no-full-access");
         if (mutate) { list.Add("--close"); list.Add("--restart"); }
         return [.. list];
     }
@@ -121,6 +124,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = count == 0 ? "提示词已同步" : $"有 {count} 个文件待同步";
         InstallSummary = string.Join("\n", data.GetProperty("roots").EnumerateArray().Select(x => x.GetString()));
         hasBackup = data.GetProperty("latestBackup").ValueKind != JsonValueKind.Null;
+        // 已登录账号时，按磁盘实际状态回填开关，避免显示与实际不一致。
+        if (data.TryGetProperty("security", out var sec) && sec.TryGetProperty("fullAccess", out var fa))
+        {
+            FullAccess = fa.ValueKind switch
+            {
+                JsonValueKind.False => false,
+                JsonValueKind.String => true, // mixed：至少一个账号已开启
+                JsonValueKind.True => true,
+                _ => FullAccess,
+            };
+        }
         RefreshCommands();
     }
 

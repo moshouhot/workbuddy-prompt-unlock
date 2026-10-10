@@ -80,6 +80,52 @@ function findTsbxRules(roots) {
   return found;
 }
 
+// ---------------------------------------------------------------- 完全访问权限
+
+/**
+ * 「允许完全访问」= 新任务不再逐条确认的全局默认权限。
+ * 存储在 preferences 的 localTaskPermissionMode：'full-access'（开）/ 'default-sandbox'（关）。
+ * 客户端代码里的默认值是 'default-sandbox'，所以缺这个键时等同于关闭。
+ */
+const FULL_ACCESS = 'full-access';
+
+/** 各账号的全局偏好文件（localTaskPermissionMode 存于此）。 */
+function findPreferenceFiles(configDir = CONFIG_DIR) {
+  const storage = path.join(configDir, 'storage');
+  if (!fs.existsSync(storage)) return [];
+  const out = [];
+  for (const dir of fs.readdirSync(storage).sort()) {
+    if (!/-personal$/.test(dir)) continue;
+    const f = path.join(storage, dir, 'global', 'preferences.json');
+    if (fs.existsSync(f)) out.push(f);
+  }
+  return out;
+}
+
+/** 把完全访问打开。只改已存在的偏好文件，不新建账号目录。 */
+function applyPermissionMode(opts = {}) {
+  const actions = [];
+  const edits = [];
+  for (const file of findPreferenceFiles(opts.configDir)) {
+    const prefs = readJson(file);
+    if (!prefs) continue;
+    if (prefs.localTaskPermissionMode === FULL_ACCESS) continue;
+    const before = prefs.localTaskPermissionMode ?? '(未设置，等同 default-sandbox)';
+    prefs.localTaskPermissionMode = FULL_ACCESS;
+    edits.push({ file, data: prefs, what: `完全访问权限: ${before} -> ${FULL_ACCESS}` });
+    actions.push('完全访问权限: 开启');
+  }
+  return { edits, actions };
+}
+
+/** 当前是否为完全访问；无偏好文件时返回 null（尚未创建账号）。 */
+function getPermissionMode(configDir = CONFIG_DIR) {
+  const files = findPreferenceFiles(configDir);
+  if (!files.length) return null;
+  const states = files.map((f) => readJson(f)?.localTaskPermissionMode === FULL_ACCESS);
+  return states.every(Boolean) ? true : states.some(Boolean) ? 'mixed' : false;
+}
+
 /** 找到当前活跃用户的凭据检测规则。 */
 function findDetectRules(configDir = CONFIG_DIR) {
   const out = [];
@@ -170,6 +216,7 @@ function getStatus(configDir = CONFIG_DIR) {
     extraAllowWrite: s.extraAllowWrite?.length ?? 0,
     tbxsRules: findTsbxRules(detectRoots()),
     detectRules: findDetectRules(configDir),
+    fullAccess: getPermissionMode(configDir),
     configDir,
   };
 }
@@ -453,7 +500,8 @@ function cmdRestore(opts) {
 
 // ---------------------------------------------------------------- main
 
-export { getStatus, applyLocal, applyEngine, findTsbxRules, settingsPaths, findDetectRules };
+export { getStatus, applyLocal, applyEngine, findTsbxRules, settingsPaths, findDetectRules,
+  applyPermissionMode, getPermissionMode, findPreferenceFiles };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const argv = process.argv.slice(2);

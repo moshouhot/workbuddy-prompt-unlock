@@ -1,6 +1,6 @@
 <Window x:Class="WorkBuddyUnlock.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="WorkBuddy Prompt Unlock"
- Width="800" Height="820" MinWidth="640" MinHeight="760" WindowStartupLocation="CenterScreen"
+ Width="800" Height="860" MinWidth="640" MinHeight="800" WindowStartupLocation="CenterScreen"
  Background="#F3F6F7" FontFamily="Microsoft YaHei UI" FontSize="14" Foreground="#24343D"
  UseLayoutRounding="True" SnapsToDevicePixels="True" Icon="unlock.ico">
  <Grid Margin="24">
@@ -33,6 +33,8 @@
      FontSize="12" Foreground="#647680" TextWrapping="Wrap" Margin="0,6,0,10"/>
     <TextBlock Text="{Binding Status}" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.AutomationId="Status"/>
     <TextBlock Text="{Binding InstallSummary}" Foreground="#647680" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,12"/>
+    <CheckBox Content="允许完全访问（新任务不再逐条确认，默认开启）"
+     IsChecked="{Binding FullAccess}" IsEnabled="{Binding IsIdle}" Margin="0,0,0,8" AutomationProperties.AutomationId="FullAccess"/>
     <CheckBox Content="同时放开本地安全配置（沙箱、文件/命令/网络规则、程序黑名单）"
      IsChecked="{Binding IncludeSecurity}" IsEnabled="{Binding IsIdle}" Margin="0,0,0,10" AutomationProperties.AutomationId="Security"/>
     <WrapPanel>

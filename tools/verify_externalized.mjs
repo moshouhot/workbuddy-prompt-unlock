@@ -128,10 +128,11 @@ for (const e of latestForFile.values()) {
     const orig = fs.readFileSync(bak, 'utf8');
     const current = fs.readFileSync(e.file, 'utf8');
 
-    // 只回归「提示词类」文件；安全配置（settings.json / tsbx_rules.json）由 security-unlock 负责，
+    // 只回归「提示词类」文件；安全配置与权限偏好由 security-unlock 负责，
     // 其内容变化不应在这里被当作失败。
     const base = path.basename(e.file).toLowerCase();
-    const isSecurityConfig = base === 'settings.json' || base.endsWith('_rules.json') || base === 'app-config.json';
+    const isSecurityConfig = base === 'settings.json' || base.endsWith('_rules.json')
+      || base === 'app-config.json' || base === 'preferences.json';
     if (isSecurityConfig) { skip++; continue; }
 
     // 只回归「本补丁应当改动过」的文件

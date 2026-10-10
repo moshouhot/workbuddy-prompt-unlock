@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { execFileSync, spawn } from 'node:child_process';
 import { detectRoots, allTargets, planFor, planForJson, loadPrompt, PROMPTS_DIR, CONFIG_DIR,
   configDirForRoot, configDirsForRoots } from './unlock.mjs';
-import { getStatus, applyLocal, applyEngine, settingsPaths } from './security-unlock.mjs';
+import { getStatus, applyLocal, applyEngine, settingsPaths, applyPermissionMode } from './security-unlock.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const STATE = process.env.WORKBUDDY_STATE_DIR || path.join(ROOT, '.state');
@@ -89,6 +89,15 @@ function plan(roots, options) {
     } else nunjucks.compile(p.text, undefined, t.file, true);
     if (p.raw !== p.text) edits.push({ file: t.file, bytes: Buffer.from(p.text), actions: p.actions });
   }
+  // 「允许完全访问」默认开启，不依赖 --security：
+  // 它是权限/确认偏好（新任务不再逐条确认），与沙箱规则是两回事。
+  if (!options.noFullAccess) {
+    for (const dir of dirs) {
+      const p = applyPermissionMode({ configDir: dir });
+      for (const e of p.edits) edits.push({ file: e.file,
+        bytes: e.raw === undefined ? jsonBytes(e.file, e.data) : Buffer.from(e.raw), actions: [e.what] });
+    }
+  }
   if (options.security) {
     // 每个配置目录单独检查托管状态并写入，避免只放开其中一套。
     // 显式指定的配置目录缺文件时报错；自动配对时目录不存在则跳过（该安装未使用）。
@@ -105,10 +114,11 @@ function plan(roots, options) {
     }
     for (const dir of dirs) {
       const { settings, appConfig } = settingsPaths(dir);
-      if (!fs.existsSync(settings) && !fs.existsSync(appConfig)) continue;
       const a = applyLocal({ configDir: dir });
       for (const e of a.edits) edits.push({ file: e.file,
         bytes: e.raw === undefined ? jsonBytes(e.file, e.data) : Buffer.from(e.raw), actions: [e.what] });
+      // 完全访问在上面已处理（默认开启，不需 --security）。
+      if (!fs.existsSync(settings) && !fs.existsSync(appConfig)) continue;
     }
     const b = applyEngine(roots, { withCredentials: false });
     for (const e of b.edits) edits.push({ file: e.file,
@@ -285,7 +295,8 @@ function run(command, options) {
       pendingChanges: edits.length, changes: edits.map(({ bytes, ...e }) => e),
       security: { sandboxSafetyEnabled: s.sandboxSafetyEnabled ?? null, fileRules: s.fileRules,
         commandRules: s.commandRules, networkRules: s.networkRules,
-        programBlacklist: s.programBlacklist ?? null, deleteProtection: s.deleteProtection ?? null },
+        programBlacklist: s.programBlacklist ?? null, deleteProtection: s.deleteProtection ?? null,
+        fullAccess: s.fullAccess ?? null },
       latestBackup: manifests().filter((m) => m.operation === 'apply' && m.status === 'applied').at(-1)?.id ?? null };
   };
   if (['status', 'preview', 'verify'].includes(command)) {
@@ -316,9 +327,9 @@ const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
 const value = (name) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 // Environment options are set before imports only when supplied by the tiny launcher below.
-const options = { security: flag('security'), close: flag('close'), restart: flag('restart'), noRestart: flag('no-restart'), dryRun: flag('dry-run'), backup: value('backup'), install: value('install'), config: value('config') };
+const options = { security: flag('security'), close: flag('close'), restart: flag('restart'), noRestart: flag('no-restart'), dryRun: flag('dry-run'), backup: value('backup'), install: value('install'), config: value('config'), noFullAccess: flag('no-full-access') };
 try {
-  const allowed = new Set(['--json', '--security', '--close', '--restart', '--no-restart', '--dry-run']);
+  const allowed = new Set(['--json', '--security', '--close', '--restart', '--no-restart', '--dry-run', '--no-full-access']);
   for (const a of args.filter((a) => a.startsWith('-'))) if (!allowed.has(a) && !/^--(backup|install|config)=/.test(a)) throw error('INVALID_ARGUMENT', `未知参数: ${a}`);
   if (command === 'help' || command === '--help') {
     const data = { commands: ['status', 'preview', 'apply', 'verify', 'restore', 'prompts', 'backups', 'installs', 'init'],
@@ -326,8 +337,8 @@ try {
         'node wb.mjs apply --install=WorkBuddy --close --restart --json',
         'node wb.mjs apply --close --restart --json',
         'node wb.mjs apply --security --close --restart --json', 'node wb.mjs restore --close --json'],
-      flags: ['--install=NAME', '--root=PATH', '--config=PATH', '--json', '--security', '--close', '--restart', '--no-restart', '--dry-run', '--backup=ID'],
-      notes: '默认处理全部安装及各自配置目录；--install 只处理勾选的安装（WorkBuddy / WorkBuddyAI，逗号分隔）；--security 可选更改本地安全配置，保留凭据检测；restore 撤销最近一次一键应用，不声称恢复官方原版。' };
+      flags: ['--install=NAME', '--root=PATH', '--config=PATH', '--json', '--security', '--no-full-access', '--close', '--restart', '--no-restart', '--dry-run', '--backup=ID'],
+      notes: '默认处理全部安装及各自配置目录；默认开启「允许完全访问」（--no-full-access 可关闭）；--install 只处理勾选的安装（WorkBuddy / WorkBuddyAI，逗号分隔）；--security 可选更改本地安全配置，保留凭据检测；restore 撤销最近一次一键应用，不声称恢复官方原版。' };
     console.log(json ? JSON.stringify({ ok: true, data }) : JSON.stringify(data, null, 2));
   } else {
     const data = run(command, options);

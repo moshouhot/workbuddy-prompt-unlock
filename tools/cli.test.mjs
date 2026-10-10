@@ -26,6 +26,9 @@ put(settings, JSON.stringify({ keep: 'untouched', sandbox: { orderedRules: { fil
 put(path.join(config, 'app/app-config.json'), JSON.stringify({ sandboxSafetyEnabled: true, keep: 1 }));
 const engine = path.join(install, 'resources/app.asar.unpacked/cli/vendor/sandbox/1/tsbx_rules.json');
 put(engine, JSON.stringify({ file_rules: [{ path: 'test' }], file_rules_user: [], network_policy: { enabled: true } }));
+// 权限偏好：新任务默认权限模式（“允许完全访问”）。
+const prefs = path.join(config, 'storage/user-test-uid-personal/global/preferences.json');
+put(prefs, JSON.stringify({ theme: 'light', language: 'zh-CN' }, null, 2) + '\n');
 const env = { ...process.env, WORKBUDDY_ROOT: install, WORKBUDDY_CONFIG_DIR: config,
   WORKBUDDY_PROMPTS_DIR: prompts, WORKBUDDY_BACKUP_DIR: backups, WORKBUDDY_STATE_DIR: path.join(tmp, 'state') };
 function cli(...args) {
@@ -78,6 +81,33 @@ test('JSON help, preview, prompt validation, apply + security, edits, undo, conf
   assert.equal(cli('restore').error.code, 'RESTORE_CONFLICT');
   assert.equal(cli('prompts').data.files.filter((f) => f.editable).length, 9);
   assert.equal(cli('backups').data.backups.length, 3); // apply, apply, restore
+});
+
+test('full access preference defaults on, preserves sibling fields, and can be disabled', () => {
+  // 前面的测试已 apply 过，先重置为关闭，让本测试自包含。
+  const base = { theme: 'light', language: 'zh-CN', localTaskPermissionMode: 'default-sandbox' };
+  put(prefs, JSON.stringify(base, null, 2) + '\n');
+  assert.equal(cli('status').data.security.fullAccess, false);
+
+  // 默认（不带任何参数）应把偏好列入待写入；--no-full-access 则不列入。
+  const planned = (res) => res.data.changes.some((c) => c.file === prefs);
+  assert.equal(planned(cli('preview')), true);
+  assert.equal(planned(cli('preview', '--no-full-access')), false);
+  assert.equal(JSON.parse(fs.readFileSync(prefs, 'utf8')).localTaskPermissionMode, 'default-sandbox'); // 预览不写入
+
+  // 实际应用：开启，且保留同文件其他字段。
+  assert.ok(cli('apply', '--install=WorkBuddy').ok);
+  const written = JSON.parse(fs.readFileSync(prefs, 'utf8'));
+  assert.equal(written.localTaskPermissionMode, 'full-access');
+  assert.equal(written.theme, 'light');
+  assert.equal(written.language, 'zh-CN');
+  assert.equal(cli('status').data.security.fullAccess, true);
+  assert.equal(cli('apply', '--install=WorkBuddy').data.changed, 0); // 已开启则不重复写
+
+  // 收尾：撤销本次 apply，让后续测试仍有待写入的模板改动。
+  assert.equal(cli('restore').ok, true);
+  assert.equal(JSON.parse(fs.readFileSync(prefs, 'utf8')).localTaskPermissionMode, 'default-sandbox');
+  assert.equal(cli('status').data.security.fullAccess, false);
 });
 
 test('locking, managed policy, missing config and missing history are explicit errors', () => {
