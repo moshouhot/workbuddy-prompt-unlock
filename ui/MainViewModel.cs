@@ -56,7 +56,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private PromptFile? selectedPrompt;
     public event PropertyChangedEventHandler? PropertyChanged;
     public ObservableCollection<PromptFile> PromptFiles { get; } = [];
-    /// <summary>发现的安装列表；默认只勾选 WorkBuddy（国内版）。</summary>
+    /// <summary>发现的安装列表；默认全部勾选。</summary>
     public ObservableCollection<InstallTarget> Installs { get; } = [];
     public bool IsIdle => !busy;
     public bool IncludeSecurity { get => includeSecurity; set { includeSecurity = value; Notify(); } }
@@ -124,7 +124,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         RefreshCommands();
     }
 
-    /// <summary>首次加载安装列表：默认只勾选 WorkBuddy（国内版），AI 版留给用户主动选择。</summary>
+    /// <summary>首次加载安装列表：默认全部勾选，避免漏同步某一套安装的独立缓存副本。</summary>
     private async Task LoadInstallsAsync()
     {
         var data = await service.RunAsync("installs");
@@ -138,14 +138,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 Root = i.GetProperty("root").GetString()!,
                 ConfigDir = i.GetProperty("configDir").GetString()!,
                 ConfigExists = i.GetProperty("configExists").GetBoolean(),
-                Selected = name.Equals("WorkBuddy", StringComparison.OrdinalIgnoreCase),
+                Selected = true,
             };
             target.PropertyChanged += (_, _) => RefreshCommands();
             Installs.Add(target);
         }
         if (Installs.Count > 0 && !Installs.Any(i => i.Selected)) Installs[0].Selected = true;
     }
-
     public bool HasNoInstallSelected => Installs.Count > 0 && !Installs.Any(i => i.Selected);
     private async Task RunAsync(string command)
     {
