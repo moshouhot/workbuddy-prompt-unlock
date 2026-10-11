@@ -238,7 +238,11 @@ apply.cmd / restore.cmd       快捷批处理入口
 prompts/                      用户可编辑的提示词
 .state/                       历史替换文本、并发锁、界面偏好记忆
 backup/                       自动备份
-docs/                         验证记录与说明
+docs/                         归档文档（验证记录、引擎说明、审核记录）
+  README.md                   文档索引
+  security-unlock.md          安全配置引擎说明
+  verification.md             验收范围与证据
+  prompt-review.md            提示词审核记录
 src/                          源代码
   cli.mjs                     JSON CLI 与事务编排
   unlock.mjs                  提示词补丁引擎（保留旧 CLI）
