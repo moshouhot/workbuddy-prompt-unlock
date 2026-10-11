@@ -48,6 +48,10 @@ Release 包**已内置** `tools/node_modules`，不需要 `npm install`，也不
 
 **允许完全访问**默认开启，不依赖上面的安全配置勾选：它把新任务的默认权限模式设为“允许完全访问”，减少逐条确认。存储在 `<配置目录>/storage/user-<uid>-personal/global/preferences.json` 的 `localTaskPermissionMode`（`full-access` / `default-sandbox`）。只改已登录账号的偏好文件，保留同文件里的主题、语言等字段；没有账号目录时不会新建。CLI 用 `--no-full-access` 可关闭。
 
+两个勾选**默认都开启**，且会被**记住**：写入 `.state/ui-preferences.json`，下次打开恢复上次选择。首次运行（或删除该文件）回到“两个都开启”。“取消勾选”表示**本次不改**，不会把已开启的开关恢复回去；它也不会改动凭据检测。
+
+界面会额外显示“客户端当前：已开启 / 未开启 / 部分账号已开启 / 尚无账号配置”，这是读磁盘得到的客观状态，与你的勾选分开看待。
+
 顶部橙色提示条常驻提醒：**WorkBuddy 升级后要回来重新“一键应用”**。升级会重新解包并覆盖模板、换掉旧版本插件缓存，改动会失效。
 
 界面还能：
@@ -123,6 +127,17 @@ node wb.mjs verify --security --json
 | `--backup=ID` | 撤销指定的统一 apply 备份 |
 | `--security` | 同时应用/检查本地安全配置，默认不动 |
 | `--no-full-access` | 不修改“允许完全访问”权限偏好（默认会开启） |
+
+### 界面勾选的记忆
+
+CLI 提供两个命令，供界面保存/读取勾选（UI 自身不写任何文件）：
+
+```cmd
+node wb.mjs ui-state --json
+node wb.mjs ui-remember --state="{\"fullAccess\":true,\"includeSecurity\":true}" --json
+```
+
+记忆文件为 `<状态目录>/ui-preferences.json`（受 `WORKBUDDY_STATE_DIR` 隔离，默认 `.state/`）。文件不存在或删除时回到“两个都开启”。
 
 ### “允许完全访问”
 

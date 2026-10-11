@@ -33,10 +33,17 @@
      FontSize="12" Foreground="#647680" TextWrapping="Wrap" Margin="0,6,0,10"/>
     <TextBlock Text="{Binding Status}" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.AutomationId="Status"/>
     <TextBlock Text="{Binding InstallSummary}" Foreground="#647680" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,12"/>
-    <CheckBox Content="允许完全访问（新任务不再逐条确认，默认开启）"
-     IsChecked="{Binding FullAccess}" IsEnabled="{Binding IsIdle}" Margin="0,0,0,8" AutomationProperties.AutomationId="FullAccess"/>
+    <CheckBox Content="允许完全访问（新任务不再逐条确认）"
+     IsChecked="{Binding FullAccess}" IsEnabled="{Binding IsIdle}" Margin="0,0,0,4" AutomationProperties.AutomationId="FullAccess"/>
+    <StackPanel Orientation="Horizontal" Margin="24,0,0,8">
+     <TextBlock Text="客户端当前：" FontSize="12" Foreground="#647680"/>
+     <TextBlock Text="{Binding FullAccessOnDisk}" FontSize="12" Foreground="#647680" AutomationProperties.AutomationId="FullAccessOnDisk"/>
+     <TextBlock Text=" · 勾选会被记住；取消勾选只是“本次不改”，不会把已开启的关掉" FontSize="12" Foreground="#647680"/>
+    </StackPanel>
     <CheckBox Content="同时放开本地安全配置（沙箱、文件/命令/网络规则、程序黑名单）"
-     IsChecked="{Binding IncludeSecurity}" IsEnabled="{Binding IsIdle}" Margin="0,0,0,10" AutomationProperties.AutomationId="Security"/>
+     IsChecked="{Binding IncludeSecurity}" IsEnabled="{Binding IsIdle}" Margin="0,0,0,2" AutomationProperties.AutomationId="Security"/>
+    <TextBlock Text="取消勾选不会把已关闭的开关恢复回去，也不改动凭据检测。"
+     FontSize="12" Foreground="#647680" TextWrapping="Wrap" Margin="24,0,0,10"/>
     <WrapPanel>
      <Button Content="一键应用" Command="{Binding ApplyCommand}" Background="{StaticResource Accent}" Foreground="White" BorderBrush="{StaticResource Accent}" AutomationProperties.AutomationId="Apply"/>
      <Button Content="预览" Command="{Binding PreviewCommand}" AutomationProperties.AutomationId="Preview"/>

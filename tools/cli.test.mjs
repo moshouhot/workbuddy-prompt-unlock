@@ -110,6 +110,25 @@ test('full access preference defaults on, preserves sibling fields, and can be d
   assert.equal(cli('status').data.security.fullAccess, false);
 });
 
+test('ui preferences default to both on, and are remembered across runs', () => {
+  const prefs = path.join(tmp, 'state', 'ui-preferences.json');
+  if (fs.existsSync(prefs)) fs.unlinkSync(prefs);
+  // 首次运行：无记忆文件 → 两个都开启。
+  assert.deepEqual(cli('ui-state').data, { remember: false, fullAccess: true, includeSecurity: true });
+  // 保存一次 → 回读保持一致。
+  assert.equal(cli('ui-remember', '--state={"fullAccess":false,"includeSecurity":false}').ok, true);
+  assert.deepEqual(cli('ui-state').data, { remember: true, fullAccess: false, includeSecurity: false });
+  // 只改一项时另一项保留。
+  assert.equal(cli('ui-remember', '--state={"fullAccess":true}').ok, true);
+  assert.deepEqual(cli('ui-state').data, { remember: true, fullAccess: true, includeSecurity: false });
+  // 非法 JSON 报错，不写入。
+  assert.equal(cli('ui-remember', '--state=not-json').error.code, 'INVALID_ARGUMENT');
+  assert.equal(cli('ui-remember').error.code, 'INVALID_ARGUMENT');
+  assert.deepEqual(cli('ui-state').data, { remember: true, fullAccess: true, includeSecurity: false });
+  fs.unlinkSync(prefs);
+  assert.deepEqual(cli('ui-state').data, { remember: false, fullAccess: true, includeSecurity: true });
+});
+
 test('locking, managed policy, missing config and missing history are explicit errors', () => {
   const lock = path.join(tmp, 'state/operation.lock');
   put(lock, 'test');

@@ -270,6 +270,36 @@ function restore(options, roots) {
     } catch (e) { restartClients(roots, previous, options); throw e; }
   });
 }
+// ---------------------------------------------------------------- 界面偏好记忆
+
+/** UI 勾选的记忆文件。与提示词历史同目录，受 WORKBUDDY_STATE_DIR 隔离。 */
+const UI_PREFS = path.join(STATE, 'ui-preferences.json');
+
+function readUiPrefs() {
+  try { return JSON.parse(fs.readFileSync(UI_PREFS, 'utf8')); } catch { return {}; }
+}
+
+function saveUiPrefs(prefs) {
+  fs.mkdirSync(STATE, { recursive: true });
+  const tmp = `${UI_PREFS}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(prefs, null, 2) + '\n', 'utf8');
+  fs.renameSync(tmp, UI_PREFS);
+}
+
+/**
+ * 界面开关的默认值与记忆：
+ * - 首次运行（无记忆文件）两个都开启。
+ * - 有记忆文件时按记忆恢复，用户取消勾选不会被静默改回。
+ */
+function readUiState() {
+  const p = readUiPrefs();
+  return {
+    remember: p.remember === true || p.fullAccess !== undefined || p.includeSecurity !== undefined,
+    fullAccess: p.fullAccess !== false,
+    includeSecurity: p.includeSecurity !== false,
+  };
+}
+
 function run(command, options) {
   // --install 只处理勾选的安装（按目录名或路径子串匹配），默认全部。
   const roots = selectRoots(detectRoots(), options);
@@ -277,6 +307,15 @@ function run(command, options) {
   if (command === 'init') return withLock(() => { validatePrompts(); recordPrompts(); return { initialized: true }; });
   if (command === 'backups') return { backups: manifests().map(({ dir, entries, ...m }) => ({ ...m, count: entries.length })) };
   if (command === 'installs') return { installs: allInstalls(options) };
+  if (command === 'ui-state') return readUiState();
+  if (command === 'ui-remember') {
+    if (!options.state) throw error('INVALID_ARGUMENT', '缺少 --state=<json>');
+    let patch;
+    try { patch = JSON.parse(options.state); } catch { throw error('INVALID_ARGUMENT', `--state 不是合法 JSON: ${options.state}`); }
+    const next = { ...readUiPrefs(), ...patch };
+    saveUiPrefs(next);
+    return { saved: next };
+  }
   if (!roots.length) throw error('NOT_INSTALLED', '未找到安装目录；使用 --root "D:\\Program Files\\WorkBuddy" 指定');
   if (command === 'restore') return restore(options, roots);
   const inspect = () => {
@@ -327,17 +366,17 @@ const command = args.find((a) => !a.startsWith('-')) || 'help';
 const flag = (name) => args.includes(`--${name}`);
 const value = (name) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 // Environment options are set before imports only when supplied by the tiny launcher below.
-const options = { security: flag('security'), close: flag('close'), restart: flag('restart'), noRestart: flag('no-restart'), dryRun: flag('dry-run'), backup: value('backup'), install: value('install'), config: value('config'), noFullAccess: flag('no-full-access') };
+const options = { security: flag('security'), close: flag('close'), restart: flag('restart'), noRestart: flag('no-restart'), dryRun: flag('dry-run'), backup: value('backup'), install: value('install'), config: value('config'), noFullAccess: flag('no-full-access'), state: value('state') };
 try {
   const allowed = new Set(['--json', '--security', '--close', '--restart', '--no-restart', '--dry-run', '--no-full-access']);
-  for (const a of args.filter((a) => a.startsWith('-'))) if (!allowed.has(a) && !/^--(backup|install|config)=/.test(a)) throw error('INVALID_ARGUMENT', `未知参数: ${a}`);
+  for (const a of args.filter((a) => a.startsWith('-'))) if (!allowed.has(a) && !/^--(backup|install|config|state)=/.test(a)) throw error('INVALID_ARGUMENT', `未知参数: ${a}`);
   if (command === 'help' || command === '--help') {
-    const data = { commands: ['status', 'preview', 'apply', 'verify', 'restore', 'prompts', 'backups', 'installs', 'init'],
+    const data = { commands: ['status', 'preview', 'apply', 'verify', 'restore', 'prompts', 'backups', 'installs', 'ui-state', 'ui-remember', 'init'],
       examples: ['node wb.mjs status --json', 'node wb.mjs installs --json',
         'node wb.mjs apply --install=WorkBuddy --close --restart --json',
         'node wb.mjs apply --close --restart --json',
         'node wb.mjs apply --security --close --restart --json', 'node wb.mjs restore --close --json'],
-      flags: ['--install=NAME', '--root=PATH', '--config=PATH', '--json', '--security', '--no-full-access', '--close', '--restart', '--no-restart', '--dry-run', '--backup=ID'],
+      flags: ['--install=NAME', '--root=PATH', '--config=PATH', '--json', '--security', '--no-full-access', '--close', '--restart', '--no-restart', '--dry-run', '--backup=ID', '--state=JSON'],
       notes: '默认处理全部安装及各自配置目录；默认开启「允许完全访问」（--no-full-access 可关闭）；--install 只处理勾选的安装（WorkBuddy / WorkBuddyAI，逗号分隔）；--security 可选更改本地安全配置，保留凭据检测；restore 撤销最近一次一键应用，不声称恢复官方原版。' };
     console.log(json ? JSON.stringify({ ok: true, data }) : JSON.stringify(data, null, 2));
   } else {

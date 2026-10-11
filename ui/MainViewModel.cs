@@ -51,7 +51,9 @@ public sealed class UiCommand(Func<Task> execute, Func<bool> canExecute) : IComm
 public sealed class MainViewModel : INotifyPropertyChanged
 {
     private readonly CliService service;
-    private bool busy, includeSecurity = false, fullAccess = true, hasBackup;
+    private bool busy, includeSecurity = true, fullAccess = true, hasBackup;
+    /// <summary>串行化偏好保存，避免快速连续切换时写入竞态。</summary>
+    private Task saveChain = Task.CompletedTask;
     private string status = "正在检查客户端…", log = "", installSummary = "";
     private PromptFile? selectedPrompt;
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -59,9 +61,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>发现的安装列表；默认全部勾选。</summary>
     public ObservableCollection<InstallTarget> Installs { get; } = [];
     public bool IsIdle => !busy;
-    public bool IncludeSecurity { get => includeSecurity; set { includeSecurity = value; Notify(); } }
+    public bool IncludeSecurity { get => includeSecurity; set { if (includeSecurity == value) return; includeSecurity = value; Notify(); Remember(); } }
     /// <summary>允许完全访问：新任务不再逐条确认。默认开启，不依赖“安全配置”勾选。</summary>
-    public bool FullAccess { get => fullAccess; set { fullAccess = value; Notify(); } }
+    public bool FullAccess { get => fullAccess; set { if (fullAccess == value) return; fullAccess = value; Notify(); Remember(); } }
     public string Status { get => status; private set { status = value; Notify(); } }
     public string InstallSummary { get => installSummary; private set { installSummary = value; Notify(); } }
     public string Log { get => log; private set { log = value; Notify(); } }
@@ -82,6 +84,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
         FolderCommand = new(() => SafeAction(service.OpenFolder), () => IsIdle);
     }
     private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new(name));
+    /// <summary>记住勾选：写 .state/ui-preferences.json，下次打开恢复。</summary>
+    private void Remember()
+    {
+        var json = $"{{\"fullAccess\":{FullAccess.ToString().ToLowerInvariant()},\"includeSecurity\":{IncludeSecurity.ToString().ToLowerInvariant()}}}";
+        saveChain = saveChain.ContinueWith(_ => service.RunAsync("ui-remember", [$"--state={json}"]),
+            TaskScheduler.Default).Unwrap();
+        saveChain.ContinueWith(t => Log = $"偏好未保存：{t.Exception?.GetBaseException().Message}",
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
+    }
     private void RefreshCommands() { Notify(nameof(HasNoInstallSelected)); foreach (var c in Commands) c.Refresh(); }
     private void SetBusy(bool value) { busy = value; Notify(nameof(IsIdle)); RefreshCommands(); }
     private Task SafeAction(Action action)
@@ -111,6 +122,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 PromptFiles.Add(new(f.GetProperty("name").GetString()!, f.GetProperty("path").GetString()!));
             SelectedPrompt = PromptFiles.FirstOrDefault(p => p.Name == "personal_files_safety.txt");
             await LoadInstallsAsync();
+            await LoadPreferencesAsync();
             await RefreshStatusAsync();
             Log = "准备就绪。先保存 WorkBuddy 中的工作，再点击“一键应用”。\n编辑提示词：选择文件 → 编辑 → 保存 → 一键应用。";
         }
@@ -124,18 +136,34 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = count == 0 ? "提示词已同步" : $"有 {count} 个文件待同步";
         InstallSummary = string.Join("\n", data.GetProperty("roots").EnumerateArray().Select(x => x.GetString()));
         hasBackup = data.GetProperty("latestBackup").ValueKind != JsonValueKind.Null;
-        // 已登录账号时，按磁盘实际状态回填开关，避免显示与实际不一致。
+        // 不把 security.fullAccess 回填到开关：开关代表用户意图，磁盘状态只作客观展示。
+        // 否则手动改过 preferences.json 或客户端升级重置后，开关会被静默改掉。
         if (data.TryGetProperty("security", out var sec) && sec.TryGetProperty("fullAccess", out var fa))
         {
-            FullAccess = fa.ValueKind switch
+            FullAccessOnDisk = fa.ValueKind switch
             {
-                JsonValueKind.False => false,
-                JsonValueKind.String => true, // mixed：至少一个账号已开启
-                JsonValueKind.True => true,
-                _ => FullAccess,
+                JsonValueKind.True => "已开启",
+                JsonValueKind.False => "未开启",
+                JsonValueKind.String => "部分账号已开启",
+                _ => "尚无账号配置",
             };
         }
         RefreshCommands();
+    }
+
+    private string fullAccessOnDisk = "";
+    /// <summary>客户端磁盘上的完全访问实际状态（只读展示）。</summary>
+    public string FullAccessOnDisk { get => fullAccessOnDisk; private set { fullAccessOnDisk = value; Notify(); } }
+
+    /// <summary>恢复上次勾选；首次运行（无记忆文件）为两个都开启。</summary>
+    private async Task LoadPreferencesAsync()
+    {
+        var data = await service.RunAsync("ui-state");
+        // 直接赋值字段，避免触发 Remember() 写回。
+        includeSecurity = data.GetProperty("includeSecurity").GetBoolean();
+        fullAccess = data.GetProperty("fullAccess").GetBoolean();
+        Notify(nameof(IncludeSecurity));
+        Notify(nameof(FullAccess));
     }
 
     /// <summary>首次加载安装列表：默认全部勾选，避免漏同步某一套安装的独立缓存副本。</summary>

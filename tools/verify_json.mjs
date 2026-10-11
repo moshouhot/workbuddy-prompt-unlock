@@ -42,7 +42,8 @@ const SECURITY_NOTE_ORIGINAL = fs.readFileSync(
   path.join(PROMPTS_DIR, 'cli_security_note.old.txt'), 'utf8').trim().split('\n')[0].trim();
 
 /** 运行时缓存：由客户端/服务端重新生成，不做逐字段比对。 */
-const isRuntimeCache = (p) => p.toLowerCase().includes(`${path.sep}.workbuddy${path.sep}cache${path.sep}`);
+/** 运行时缓存：由客户端/服务端重新生成，不做逐字段比对。两套配置目录都有。 */
+const isRuntimeCache = (p) => /[\\/]\.workbuddy(-ai)?[\\/]cache[\\/]/i.test(p);
 
 /**
  * 只校验「提示词类」文件 —— 即含 prompts[] 数组的 product.json / 产品配置。
