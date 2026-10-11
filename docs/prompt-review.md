@@ -15,7 +15,7 @@
 - npm test：3 组全部通过（临时隔离安装的同步、再编辑、撤销、冲突、Windows 文件锁回滚）。
 - wb.mjs preview --json：46 个目标，39 个待同步；所有待写入文本通过 CLI 的模板语法预检。
 - 两个 .old.txt 与精简前 SHA256 一致。
-- 未应用到真实客户端，未关闭/重启 WorkBuddy。待用户保存工作后通过 UI.vbs 中“一键应用”同步。
+- 未应用到真实客户端，未关闭/重启 WorkBuddy。待用户保存工作后通过 `WorkBuddyUnlock.exe` 中“一键应用”同步。
 
 精简前源文件备份：`backup-manual/prompts-review-2026-10-10T10-42-24-010Z.json`。
 

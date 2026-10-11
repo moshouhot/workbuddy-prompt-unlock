@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { fileURLToPath } from 'node:url';
-const B = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'backup');
+const B = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'backup');
 const ids = fs.readdirSync(B).filter((d) => fs.existsSync(path.join(B, d, 'manifest.json'))).sort();
 
 // 每个文件只取最新一次备份作为基线。
@@ -21,11 +21,11 @@ const NUNJUCK = /\{[%{#]/;
 
 const CUSTOM_OLD = 'The user has provided the following custom instructions. You MUST follow them in all responses unless they conflict with safety rules.';
 // 替换文本以 prompts/ 为准，不再硬编码 —— 否则一改措辞就会出现大批误报。
-const PROMPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'prompts');
+const PROMPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'prompts');
 const loadPrompt = (name) =>
   fs.readFileSync(path.join(PROMPTS_DIR, name), 'utf8').replace(/\r\n/g, '\n').replace(/\n+$/, '');
 // 历史变体 + 当前内容：旧补丁与本次补丁都要能被剥离。
-const HISTORY_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '.state', 'prompt-history.json');
+const HISTORY_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.state', 'prompt-history.json');
 const history = fs.existsSync(HISTORY_FILE) ? JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')) : {};
 const variants = (name) => [...new Set([...(history[name] || []), loadPrompt(name)])].filter(Boolean);
 const CUSTOM_VARIANTS = [...variants('user_custom.new.txt'), loadPrompt('user_custom.old.txt')];

@@ -14,7 +14,7 @@ cd workbuddy-prompt-unlock
 npm install
 ```
 
-`npm install` 是**必需**的：它会安装 `tools/node_modules/nunjucks`，用于在写入前做模板语法校验。跳过这步时任何命令都会直接返回 `INITIALIZATION_FAILED`（`Cannot find module './tools/node_modules/nunjucks'`）。该目录不入库，所以每次全新 clone 都要装一次。
+`npm install` 是**必需**的：它会安装 `src/tools/node_modules/nunjucks`，用于在写入前做模板语法校验。跳过这步时任何命令都会直接返回 `INITIALIZATION_FAILED`（`Cannot find module 'src/tools/node_modules/nunjucks'`）。该目录不入库，所以每次全新 clone 都要装一次。
 
 安装后先做只读检查，确认能发现你的安装：
 
@@ -32,15 +32,15 @@ node wb.mjs status --root="D:\Program Files\WorkBuddy" --json
 
 ### 用 Release 包（推荐）
 
-在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.0.0-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 `UI.vbs` 即可。
+在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.4.0-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 **`WorkBuddyUnlock.exe`** 即可。
 
-Release 包**已内置** `tools/node_modules`，不需要 `npm install`，也不需要联网。
+Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，也不需要联网。
 
 自己 clone 源码时仍需运行一次 `npm install`（仓库不包含依赖目录）。
 
 ## 人使用：一键完成
 
-双击 **`UI.vbs`**（或 `app/WorkBuddyUnlock.exe`），不弹命令行窗口。
+双击项目根目录下的 **`WorkBuddyUnlock.exe`**（WPF 应用，本身不弹命令行窗口）。
 
 1. 先保存 WorkBuddy 中的工作。
 2. 点击 **一键应用**：校验提示词 → 关闭客户端 → 备份 → 同步 → 校验 → 重启。
@@ -71,7 +71,7 @@ Release 包**已内置** `tools/node_modules`，不需要 `npm install`，也不
 - Windows 10/11 x64
 - Node.js LTS（本机测试 Node 24.13.0），`node` 在 PATH 中
 - .NET 8 Desktop Runtime x64（仅 GUI 需要）
-- 保持项目目录完整，尤其是 `prompts/`。首次使用必须先运行 `npm install` 安装 `tools/node_modules/nunjucks`。
+- 保持项目目录完整，尤其是 `prompts/`。首次使用必须先运行 `npm install` 安装 `src/tools/node_modules/nunjucks`。
 
 界面 EXE 不是整个工具的单文件封装；它调用同目录项目中的 CLI。无需安装 Python、Electron 或启动 Web 服务。
 
@@ -213,18 +213,18 @@ WorkBuddy 升级可能覆盖这些文件，**升级后再次一键应用**。不
 ```cmd
 npm test
 node wb.mjs verify --json
-dotnet publish ui/WorkBuddyUnlock.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o app
+dotnet publish src/ui/WorkBuddyUnlock.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o .
 ```
 
 GUI 为 C# / WPF 的薄壳：ViewModel 管状态，CliService 调 CLI，不在 C# 重写补丁逻辑。无 GUI 第三方依赖。
 
-原有回归脚本继续保留：`tools/compile_test.mjs`、`render_test.mjs`、`verify_diff.mjs`、`verify_json.mjs`、`verify_externalized.mjs`。
+原有回归脚本继续保留：`src/tools/compile_test.mjs`、`render_test.mjs`、`verify_diff.mjs`、`verify_json.mjs`、`verify_externalized.mjs`。
 
 安装更新提示“存在用户项目目录”时：
 
 ```cmd
-node tools/check_install_guard.mjs
-node tools/check_install_guard.mjs --fix
+node src/tools/check_install_guard.mjs
+node src/tools/check_install_guard.mjs --fix
 ```
 
 工具只删除已知纯缓存，不删除真实项目。不要将安装目录作为开发工作区，也不要在安装根目录留下 `.ruff_cache` 等额外目录。
@@ -232,15 +232,20 @@ node tools/check_install_guard.mjs --fix
 ## 目录
 
 ```text
-UI.vbs                  人使用：无命令行窗口启动界面
-app/WorkBuddyUnlock.exe  WPF 界面
-wb.mjs / cli.mjs         AI 与 GUI 共用入口/事务编排
-unlock.mjs              提示词补丁引擎（保留旧 CLI）
-security-unlock.mjs     安全配置引擎（保留旧 CLI）
-apply.cmd / restore.cmd  快捷入口
-prompts/                用户可编辑的提示词
-.state/                 历史替换文本、并发锁
-backup/                 自动备份
-ui/                     GUI 源码
- tools/                 回归测试与诊断
+WorkBuddyUnlock.exe           人使用：双击启动界面（WPF，无命令行窗口）
+wb.mjs                        稳定入口（命令行与 GUI 共用）
+apply.cmd / restore.cmd       快捷批处理入口
+prompts/                      用户可编辑的提示词
+.state/                       历史替换文本、并发锁、界面偏好记忆
+backup/                       自动备份
+docs/                         验证记录与说明
+src/                          源代码
+  cli.mjs                     JSON CLI 与事务编排
+  unlock.mjs                  提示词补丁引擎（保留旧 CLI）
+  security-unlock.mjs         安全配置与权限引擎（保留旧 CLI）
+  paths.mjs                   统一的路径解析
+  ui/                         WPF 界面源码
+  tools/                      回归测试、诊断与 nunjucks 依赖
 ```
+
+根目录只放用户入口与数据；引擎、界面源码和测试都在 `src/` 下。

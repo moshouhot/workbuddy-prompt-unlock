@@ -99,7 +99,7 @@ const ctx = {
   systemPrompt: '', user_query: 'test',
 };
 
-const B = path.join(__dirname, '..', 'backup');
+const B = path.join(__dirname, '..', '..', 'backup');
 const ids = fs.readdirSync(B).filter((d) => fs.existsSync(path.join(B, d, 'manifest.json'))).sort();
 const files = [];
 for (const id of ids) {

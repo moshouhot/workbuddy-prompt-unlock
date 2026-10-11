@@ -34,9 +34,8 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
+import { BACKUP_ROOT, STATE_DIR } from './paths.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BACKUP_ROOT = process.env.WORKBUDDY_BACKUP_DIR || path.join(__dirname, 'backup');
 const HOME = os.homedir();
 const CONFIG_DIR = process.env.WORKBUDDY_CONFIG_DIR?.trim() || path.join(HOME, '.workbuddy');
 

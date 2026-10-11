@@ -30,9 +30,8 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
+import { PROMPTS_DIR, BACKUP_ROOT } from './paths.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BACKUP_ROOT = process.env.WORKBUDDY_BACKUP_DIR || path.join(__dirname, 'backup');
 const HOME = os.homedir();
 const CONFIG_DIR = process.env.WORKBUDDY_CONFIG_DIR || path.join(HOME, '.workbuddy');
 
@@ -64,7 +63,7 @@ function configDirsForRoots(roots) {
 
 // ---------------------------------------------------------------- 替换文本（从 prompts/ 读取）
 
-const PROMPTS_DIR = process.env.WORKBUDDY_PROMPTS_DIR || path.join(__dirname, 'prompts');
+// PROMPTS_DIR 由 ./paths.mjs 解析（支持 WORKBUDDY_PROMPTS_DIR 覆盖）。
 
 /**
  * 读取 prompts/ 下的替换文本。

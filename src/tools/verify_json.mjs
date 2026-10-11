@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const B = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'backup');
+const B = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'backup');
 const ids = fs.readdirSync(B).filter((d) => fs.existsSync(path.join(B, d, 'manifest.json'))).sort();
 
 const REFUSAL_MARKERS = [
@@ -32,7 +32,7 @@ const REFUSAL_MARKERS = [
  * 补丁标记不硬编码文本 —— 否则 prompts/ 一改措辞，校验器就会误报“未检测到补丁”。
  * 直接从 prompts/ 取当前文本的首个非空行作为签名。
  */
-const PROMPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'prompts');
+const PROMPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'prompts');
 const signature = (name) => {
   const raw = fs.readFileSync(path.join(PROMPTS_DIR, name), 'utf8').replace(/\r\n/g, '\n');
   return raw.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('<') && !l.startsWith('#'));

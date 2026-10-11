@@ -3,7 +3,7 @@
 ## 交付形态
 
 - 统一 Node CLI：`wb.mjs` → `cli.mjs` → 现有提示词/安全配置引擎。
-- C# / WPF Windows GUI：`UI.vbs` / `app/WorkBuddyUnlock.exe`，调用同一 CLI，未复制补丁算法。VBS 按自身目录定位 EXE，无命令行窗口。
+- C# / WPF Windows GUI：`WorkBuddyUnlock.exe`（项目根目录），调用同一 CLI，未复制补丁算法。EXE 向上查找 `wb.mjs` 定位项目根。
 - 提示词仍在 `prompts/`。已打补丁的 content_policy 也能继续同步编辑后的内容；查找替换对保留历史。
 - 不修改 app.asar，不在安装根目录创建工程文件或缓存。
 
@@ -36,7 +36,7 @@ Release 发布成功（.NET 8 WPF / win-x64 / framework-dependent single-file GU
 - `ui-synthetic-normal.png`：常规窗口，96 DPI 渲染。
 - `ui-synthetic-compact150.png`：最小窗口，144 DPI 渲染；不是修改显示器缩放的物理 DPI 验收。
 
-截图不在仓库内（由本机 `tools/ui_smoke.ps1 -Screenshots` 生成到 `docs/`，已由 `.gitignore` 排除）。
+截图不在仓库内（由本机 `src/tools/ui_smoke.ps1 -Screenshots` 生成到 `docs/`，已由 `.gitignore` 排除）。
 
 最小窗口日志区已修正为可读，未发现按钮或 footer 裁切。
 

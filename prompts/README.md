@@ -67,7 +67,7 @@
 
 1. **编码**：必须 UTF-8，无 BOM。
 2. **换行**：LF 或 CRLF 都行，`unlock.mjs` 会按目标模板的换行风格转换。
-3. **不要加 nunjucks 语法**：这些是纯文本，会作为字面量写入。若需要模板变量（如 `{{ productName }}`），WorkBuddy 会在后续渲染阶段处理，但**新引入的 `{% %}` 可能破坏模板**——`tools/compile_test.mjs` 会检出。
+3. **不要加 nunjucks 语法**：这些是纯文本，会作为字面量写入。若需要模板变量（如 `{{ productName }}`），WorkBuddy 会在后续渲染阶段处理，但**新引入的 `{% %}` 可能破坏模板**——`src/tools/compile_test.mjs` 会检出。
 4. **尾部空行会被裁剪**：`loadPrompt()` 会去掉末尾所有换行，保持与原硬编码一致。
 5. **成对文件**：`cli_security_note.*` 和 `user_custom.*` 是「查找-替换」对，改 `new` 随意，改 `old` 要谨慎。
 
@@ -78,7 +78,7 @@
 改完 prompts/ 后：
 
 ```cmd
-cd ..\tools
+cd ..\src\tools
 node compile_test.mjs           # 语法没被破坏
 node verify_externalized.mjs    # prompts/ 与磁盘补丁逐字节一致
 node render_test.mjs            # 渲染成功且无原始拒答残留

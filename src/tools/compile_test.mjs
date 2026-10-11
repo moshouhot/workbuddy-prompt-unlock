@@ -12,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const nunjucks = require(path.join(__dirname, 'node_modules', 'nunjucks', 'index.js'));
 
-const B = path.join(__dirname, '..', 'backup');
+const B = path.join(__dirname, '..', '..', 'backup');
 const ids = fs.readdirSync(B).filter((d) => fs.existsSync(path.join(B, d, 'manifest.json'))).sort();
 
 const files = [];

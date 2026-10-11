@@ -14,7 +14,7 @@ for (let i = 0; i < args.length; i++) {
   process.env[mappings[match[1]]] = value;
 }
 process.argv = [...process.argv.slice(0, 2), ...rest];
-try { await import('./cli.mjs'); }
+try { await import('./src/cli.mjs'); }
 catch (e) {
   console.log(JSON.stringify({ ok: false, error: { code: 'INITIALIZATION_FAILED', message: e.message } }));
   process.exitCode = 1;

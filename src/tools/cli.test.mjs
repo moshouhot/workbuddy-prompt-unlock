@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
-const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-cli-'));
 const install = path.join(tmp, 'WorkBuddy'), config = path.join(tmp, '.workbuddy');
 const prompts = path.join(tmp, 'prompts'), backups = path.join(tmp, 'backup');

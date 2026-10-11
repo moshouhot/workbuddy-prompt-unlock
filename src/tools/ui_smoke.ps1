@@ -2,8 +2,8 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
-$project = Split-Path $PSScriptRoot -Parent
-$exe = Join-Path $project 'app\WorkBuddyUnlock.exe'
+$project = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$exe = Join-Path $project 'WorkBuddyUnlock.exe'
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('wb-ui-' + [guid]::NewGuid().ToString('N'))
 $names = @('WORKBUDDY_ROOT','WORKBUDDY_CONFIG_DIR','WORKBUDDY_PROMPTS_DIR','WORKBUDDY_BACKUP_DIR','WORKBUDDY_STATE_DIR')
 $old = @{}; foreach ($n in $names) { $old[$n] = [Environment]::GetEnvironmentVariable($n) }

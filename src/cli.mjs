@@ -9,13 +9,11 @@ import { execFileSync, spawn } from 'node:child_process';
 import { detectRoots, allTargets, planFor, planForJson, loadPrompt, PROMPTS_DIR, CONFIG_DIR,
   configDirForRoot, configDirsForRoots } from './unlock.mjs';
 import { getStatus, applyLocal, applyEngine, settingsPaths, applyPermissionMode } from './security-unlock.mjs';
+import { STATE_DIR as STATE, BACKUP_ROOT as BACKUPS, NUNJUCKS_PATH } from './paths.mjs';
 
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const STATE = process.env.WORKBUDDY_STATE_DIR || path.join(ROOT, '.state');
-const BACKUPS = process.env.WORKBUDDY_BACKUP_DIR || path.join(ROOT, 'backup');
 const HISTORY = path.join(STATE, 'prompt-history.json');
 const require = createRequire(import.meta.url);
-const nunjucks = require('./tools/node_modules/nunjucks');
+const nunjucks = require(NUNJUCKS_PATH);
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const names = [
