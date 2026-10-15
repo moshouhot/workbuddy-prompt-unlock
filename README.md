@@ -32,7 +32,7 @@ node wb.mjs status --root="D:\Program Files\WorkBuddy" --json
 
 ### 用 Release 包（推荐）
 
-在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.5.1-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 **`WorkBuddyUnlock.exe`** 即可。
+在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.5.2-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 **`WorkBuddyUnlock.exe`** 即可。
 
 Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，也不需要联网。
 
@@ -41,7 +41,7 @@ Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，�
 ## 人使用：一键完成
 
 双击项目根目录下的 **`WorkBuddyUnlock.exe`**（WPF 应用，本身不弹命令行窗口）。
-窗口标题栏显示**软件名 + 版本号 + 实现语言**（如 `WorkBuddy Prompt Unlock v1.5.1 · C#`）；版本号来自 `package.json`，与 Release 包名、EXE 文件属性一致。窗口内容区不重复主标题/副标题，打开窗口即看到升级提醒、目标安装、状态和操作按钮。
+窗口标题栏显示**软件名 + 版本号 + 实现语言**（如 `WorkBuddy Prompt Unlock v1.5.2 · C#`）；版本号来自 `package.json`，与 Release 包名、EXE 文件属性一致。窗口内容区不重复主标题/副标题，打开窗口即看到升级提醒、目标安装、状态和操作按钮。
 
 1. 先保存 WorkBuddy 中的工作。
 2. 点击 **一键应用**：校验提示词 → 关闭客户端 → 备份 → 同步 → 校验 → 重启。
