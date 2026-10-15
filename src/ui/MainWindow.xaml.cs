@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -11,6 +12,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent(); model = new MainViewModel(new CliService()); DataContext = model;
+        // 标题栏：软件名 + 版本号 + 实际实现语言。版本取自程序集元数据，
+        // 而程序集版本又由 package.json 生成，因此全链只有一个版本来源。
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        Title = $"WorkBuddy Prompt Unlock v{version?.Major}.{version?.Minor}.{version?.Build} · C#";
         if (Environment.GetCommandLineArgs().Contains("--compact")) { Width = MinWidth; Height = MinHeight; }
         Loaded += async (_, _) =>
         {

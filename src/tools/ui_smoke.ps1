@@ -55,6 +55,18 @@ try {
     WaitUntil { $process.Refresh(); $process.MainWindowHandle -ne 0 }
     $window = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
     WaitUntil { (FindId 'Apply').Current.IsEnabled -and (LogText).Length -gt 0 }
+    # 标题栏必须带软件名、版本号和实现语言；版本与 EXE 程序集版本（源自 package.json）一致。
+    $expectedVersion = (Get-Item $exe).VersionInfo.FileVersion
+    if ($process.MainWindowTitle -notmatch ('^WorkBuddy Prompt Unlock v' + [regex]::Escape($expectedVersion) + ' . C#$')) {
+        throw "Title must be 'WorkBuddy Prompt Unlock v<version> . C#' but was '$($process.MainWindowTitle)'"
+    }
+    # 内容区不得重复主标题/副标题：标题栏已表达软件名与说明，这里不应再出现同样文案。
+    $titleTexts = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+        (New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [System.Windows.Automation.ControlType]::Text))) | ForEach-Object { $_.Current.Name }
+    if ($titleTexts -contains 'WorkBuddy Prompt Unlock') { throw 'Content area must not repeat the app title' }
+    if ($titleTexts -match '本地提示词管理') { throw 'Content area must not repeat the subtitle' }
     # Inspect the real tree first, then invoke controls by their observed IDs.
     $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object {
         if ($_.Current.AutomationId) { Write-Host $_.Current.ControlType.ProgrammaticName $_.Current.AutomationId $_.Current.IsEnabled }
@@ -112,6 +124,7 @@ try {
         }
     }
     Write-Host 'PASS: UI preview, security checkbox, apply, restore, button states, byte parity, close'
+    Write-Host 'PASS: title bar carries name + version + language; no duplicated title/subtitle in content'
 } finally {
     if ($process -and !$process.HasExited) { $process.Kill() }
     foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $old[$n]) }

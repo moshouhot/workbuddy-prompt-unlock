@@ -9,11 +9,13 @@
 
 ## 自动测试
 
-`npm test`：3 组全部通过，覆盖：
+`npm test`：5 项全部通过，覆盖：
 
 1. JSON 帮助/参数/输出，preview 无写入，提示词错误不写入，提示词与安全配置一体备份/应用，重复应用无变化，三个 content_policy 和两个 new 文本的后续编辑，字面量 `$&` / `$1` / `$$`，撤销、冲突与备份列表。
 2. 操作锁、最新企业托管状态、缺少配置、说明段缺少历史时明确报错。
 3. 实际 Windows 文件共享锁阻止第二次写入时，第一个已写文件自动恢复；备份状态为 rolled-back。
+4. “允许完全访问”偏好默认开启、保留同文件其他字段、可用 `--no-full-access` 关闭。
+5. 界面勾选偏好默认“两个都开启”，且跨进程记住上次选择。
 
 所有写入测试使用独立临时安装/配置/提示词目录，不修改生产客户端。
 
@@ -21,9 +23,11 @@
 
 Release 发布成功（.NET 8 WPF / win-x64 / framework-dependent single-file GUI）。
 
-`powershell -NoProfile -ExecutionPolicy Bypass -File tools/ui_smoke.ps1 -Screenshots`：
+`powershell -NoProfile -ExecutionPolicy Bypass -File src/tools/ui_smoke.ps1 -Screenshots`：
 
 - 在真实 WPF 窗口中通过 UI Automation 点击“预览”“应用”“撤销”，非绕过 UI 的内部调用。
+- 标题栏为 `WorkBuddy Prompt Unlock v<版本> · C#`，版本与 EXE 程序集版本（源自 `package.json`）一致；断言写成 `^WorkBuddy Prompt Unlock v<FileVersion> . C#$`。
+- 内容区不重复主标题/副标题（断言：内容区 TextBlock 中不得出现 `WorkBuddy Prompt Unlock` 或“本地提示词管理”）。
 - 预览未改变文件哈希。
 - 安全配置 checkbox 到 CLI 生效。
 - 应用改变目标，撤销后提示词目标字节与安全配置恢复。
@@ -38,18 +42,21 @@ Release 发布成功（.NET 8 WPF / win-x64 / framework-dependent single-file GU
 
 截图不在仓库内（由本机 `src/tools/ui_smoke.ps1 -Screenshots` 生成到 `docs/`，已由 `.gitignore` 排除）。
 
-最小窗口日志区已修正为可读，未发现按钮或 footer 裁切。
+最小窗口（640×800）下已逐项确认：日志区可读；长安装路径在勾选行内换行（不硬切）；最长提示词标签（“Agent / Expert 内容策略 · content_policy.craft-expert.txt”≈440px，超出可用宽约 342px）改用省略号 + 悬停全称；按钮与 footer 未裁切。
 
 ## 真实安装只读检查
 
 `node wb.mjs verify --security --json`：
 
-- 两份安装（WorkBuddy、WorkBuddyAI）
-- 发现 46 个目标，待同步 0
+- 两份安装（`WorkBuddy` 国内版、`WorkBuddyAI`）
+- 两份安装各自发现提示词目标，合计 `targetCount` 随客户端版本变化（实测 54～57）；待同步 0
 - 沙箱关闭、规则/黑名单为空的现状保持不变
 - 本轮未为真实安装产生新应用备份（没有需要改的内容）
 
-既有工具：compile 42 成功/0 失败；render 40 成功/0 失败/2 缺 include 跳过；verify_diff 检查 68 文件/0 异常；verify_json 检查 7/0 异常；verify_externalized 一致 38/不一致 0/跳过 5；安装目录守卫两份均正常。
+> 这类计数（`targetCount`、各回归脚本扫到的文件数）跟随客户端当前安装的版本增减，
+> 是实时快照而非固定基准；**只要“失败/异常/不一致”为 0 即通过**，不必与历史数字相等。
+
+既有工具（本次实测）：compile 58 成功/0 失败；render 56 成功/0 真实失败/2 缺 include 跳过；verify_diff 45 文件/0 异常；verify_json 13/0 异常；verify_externalized 一致 47/不一致 0；安装目录守卫两份均正常。
 
 LSP 探测无诊断但 6 文件均未确认完成，不作为通过证据；使用实际 Node 语法检查、自动测试与 WPF Release 编译证明。
 

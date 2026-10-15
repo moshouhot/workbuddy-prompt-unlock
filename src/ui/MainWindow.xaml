@@ -1,15 +1,11 @@
 <Window x:Class="WorkBuddyUnlock.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
- xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="WorkBuddy Prompt Unlock"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  Width="800" Height="860" MinWidth="640" MinHeight="800" WindowStartupLocation="CenterScreen"
  Background="#F3F6F7" FontFamily="Microsoft YaHei UI" FontSize="14" Foreground="#24343D"
  UseLayoutRounding="True" SnapsToDevicePixels="True" Icon="unlock.ico">
- <Grid Margin="24">
-  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <StackPanel Margin="0,0,0,14">
-   <TextBlock Text="WorkBuddy Prompt Unlock" FontSize="24" FontWeight="SemiBold"/>
-   <TextBlock Text="本地提示词管理 · 修改文件后，一键同步到客户端" Foreground="#647680" Margin="0,5,0,0"/>
-  </StackPanel>
-  <Border Grid.Row="1" Background="#FFF4E5" BorderBrush="#E8A33D" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12"
+ <Grid Margin="24,18,24,20">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <Border Grid.Row="0" Background="#FFF4E5" BorderBrush="#E8A33D" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12"
     AutomationProperties.AutomationId="UpgradeNotice">
    <StackPanel>
     <TextBlock Text="⚠  WorkBuddy 升级后，请回来重新点一次“一键应用”" FontWeight="Bold" Foreground="#8A5300" TextWrapping="Wrap"/>
@@ -17,14 +13,17 @@
      FontSize="12" Foreground="#8A5300" TextWrapping="Wrap" Margin="0,5,0,0"/>
    </StackPanel>
   </Border>
-  <Border Grid.Row="2" Background="White" BorderBrush="#DCE4E7" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+  <Border Grid.Row="1" Background="White" BorderBrush="#DCE4E7" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,12">
    <StackPanel>
     <TextBlock Text="目标安装" FontWeight="SemiBold" Margin="0,0,0,8"/>
     <ItemsControl ItemsSource="{Binding Installs}" IsEnabled="{Binding IsIdle}" AutomationProperties.AutomationId="Installs">
      <ItemsControl.ItemTemplate>
       <DataTemplate>
-       <CheckBox IsChecked="{Binding Selected, Mode=TwoWay}" Content="{Binding Label}" Margin="0,0,0,4">
+       <CheckBox IsChecked="{Binding Selected, Mode=TwoWay}" Margin="0,0,0,4">
         <CheckBox.ToolTip><TextBlock Text="{Binding Label}" TextWrapping="Wrap" MaxWidth="640"/></CheckBox.ToolTip>
+        <!-- 用可换行的 TextBlock 而不是字符串 Content：安装路径可能很长，
+             窄窗口（最小宽度 640）下字符串 Content 不换行，会被硬切且无省略号。 -->
+        <TextBlock Text="{Binding Label}" TextWrapping="Wrap"/>
        </CheckBox>
       </DataTemplate>
      </ItemsControl.ItemTemplate>
@@ -53,11 +52,22 @@
      FontSize="12" Foreground="#647680" TextWrapping="Wrap" Margin="0,10,0,0"/>
    </StackPanel>
   </Border>
-  <Border Grid.Row="3" Background="White" BorderBrush="#DCE4E7" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+  <Border Grid.Row="2" Background="White" BorderBrush="#DCE4E7" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,12">
    <StackPanel>
     <TextBlock Text="修改提示词" FontWeight="SemiBold" Margin="0,0,0,10"/>
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-     <ComboBox ItemsSource="{Binding PromptFiles}" SelectedItem="{Binding SelectedPrompt}" DisplayMemberPath="Label" IsEnabled="{Binding IsIdle}" VerticalContentAlignment="Center" Margin="0,0,10,0"/>
+     <ComboBox ItemsSource="{Binding PromptFiles}" SelectedItem="{Binding SelectedPrompt}" IsEnabled="{Binding IsIdle}" VerticalContentAlignment="Center" Margin="0,0,10,0">
+      <!-- 最长标签（“Agent / Expert 内容策略 · content_policy.craft-expert.txt”≈440px）
+           超出最小窗口（640px）的可用宽度，默认字符串渲染会被硬切且无省略号。
+           用带省略号 + 悬停全称的模板，短标签不受影响。 -->
+      <ComboBox.ItemTemplate>
+       <DataTemplate>
+        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis">
+         <TextBlock.ToolTip><TextBlock Text="{Binding Label}" TextWrapping="Wrap" MaxWidth="560"/></TextBlock.ToolTip>
+        </TextBlock>
+       </DataTemplate>
+      </ComboBox.ItemTemplate>
+     </ComboBox>
      <Button Grid.Column="1" Content="编辑文件" Command="{Binding EditCommand}" AutomationProperties.AutomationId="Edit"/>
      <Button Grid.Column="2" Content="打开目录" Command="{Binding FolderCommand}" Margin="0"/>
     </Grid>
@@ -65,10 +75,10 @@
      FontSize="12" Foreground="#647680" TextWrapping="Wrap" Margin="0,10,0,0"/>
    </StackPanel>
   </Border>
-  <TextBox Grid.Row="4" Text="{Binding Log, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True"
+  <TextBox Grid.Row="3" Text="{Binding Log, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True"
     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="#FFFFFF" BorderBrush="#DCE4E7"
     Padding="12" MinHeight="90" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12" AutomationProperties.AutomationId="Log"/>
-  <TextBlock Grid.Row="5" Text="只改解包文件，不重新打包 app.asar。提示词约束不等于系统调用硬拦截。"
+  <TextBlock Grid.Row="4" Text="只改解包文件，不重新打包 app.asar。提示词约束不等于系统调用硬拦截。"
     Foreground="#647680" FontSize="11" TextWrapping="Wrap" Margin="0,12,0,0"/>
  </Grid>
 </Window>

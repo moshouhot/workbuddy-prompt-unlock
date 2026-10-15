@@ -8,7 +8,34 @@
     <ApplicationIcon>unlock.ico</ApplicationIcon>
     <AssemblyName>WorkBuddyUnlock</AssemblyName>
     <RootNamespace>WorkBuddyUnlock</RootNamespace>
-    <Version>1.0.0</Version>
+    <!-- 版本只有一个来源：仓库根的 package.json（与 Release 包名、git tag 一致）。
+         不再手写第二份，避免像之前 csproj 停在 1.0.0、而 package.json 已到 1.5.x 这种漂移。
+         读不到时退化为 0.0.0，构建不因此失败。 -->
+    <_PackageJsonPath>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\package.json'))</_PackageJsonPath>
+    <_PackageJsonText Condition="Exists('$(_PackageJsonPath)')">$([System.IO.File]::ReadAllText('$(_PackageJsonPath)'))</_PackageJsonText>
+    <AppVersion Condition="'$(_PackageJsonText)' != ''">$([System.Text.RegularExpressions.Regex]::Match($(_PackageJsonText), '"version"\s*:\s*"([^"]+)"').Groups[1].Value)</AppVersion>
+    <AppVersion Condition="'$(AppVersion)' == ''">0.0.0</AppVersion>
+    <Version>$(AppVersion)</Version>
+    <FileVersion>$(AppVersion)</FileVersion>
+    <InformationalVersion>$(AppVersion)</InformationalVersion>
+    <!-- 全部条目显式声明，不用 SDK 默认通配项：
+         `dotnet publish -o .` 时 PublishDir 落到仓库根目录，而根目录是 src/ui 的祖先目录，
+         SDK 会把 $(PublishDir)/** 追加进 DefaultItemExcludes，把 **整个 src/ui 下的 .cs/.xaml 全部排除**，
+         结果是“编译成功”但 Compile 计数为 0：没有代码隐藏、没有 mainwindow.baml，
+         EXE 要么启动即崩，要么窗口全白且不执行任何逻辑。
+         显式 Include 不经过 DefaultItemExcludes，因此与 PublishDir 无关。
+         触发版本：.NET SDK 10.0.400（其 DefaultItems.targets 只挡住了 PublishDir == 项目目录，未挡住祖先目录）。 -->
+    <EnableDefaultItems>false</EnableDefaultItems>
   </PropertyGroup>
-  <ItemGroup><Resource Include="unlock.ico" /></ItemGroup>
+  <ItemGroup>
+    <Compile Include="App.xaml.cs" />
+    <Compile Include="CliService.cs" />
+    <Compile Include="MainViewModel.cs" />
+    <Compile Include="MainWindow.xaml.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml" SubType="Designer" Generator="MSBuild:Compile" />
+    <Page Include="MainWindow.xaml" SubType="Designer" Generator="MSBuild:Compile" />
+    <Resource Include="unlock.ico" />
+  </ItemGroup>
 </Project>

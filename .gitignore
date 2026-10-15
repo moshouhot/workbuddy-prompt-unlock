@@ -8,3 +8,8 @@ src/tools/node_modules/
 src/ui/bin/
 src/ui/obj/
 WorkBuddyUnlock.pdb
+
+# Release 成品：作为 GitHub Release 资产分发，不入库。
+# 本地构建会在仓库根生成它们，避免误提交 2MB 二进制。
+workbuddy-prompt-unlock-*-full.zip
+workbuddy-prompt-unlock-*-full.zip.sha256

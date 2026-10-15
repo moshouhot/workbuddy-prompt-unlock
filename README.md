@@ -32,7 +32,7 @@ node wb.mjs status --root="D:\Program Files\WorkBuddy" --json
 
 ### 用 Release 包（推荐）
 
-在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.4.0-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 **`WorkBuddyUnlock.exe`** 即可。
+在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.5.1-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 **`WorkBuddyUnlock.exe`** 即可。
 
 Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，也不需要联网。
 
@@ -41,6 +41,7 @@ Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，�
 ## 人使用：一键完成
 
 双击项目根目录下的 **`WorkBuddyUnlock.exe`**（WPF 应用，本身不弹命令行窗口）。
+窗口标题栏显示**软件名 + 版本号 + 实现语言**（如 `WorkBuddy Prompt Unlock v1.5.1 · C#`）；版本号来自 `package.json`，与 Release 包名、EXE 文件属性一致。窗口内容区不重复主标题/副标题，打开窗口即看到升级提醒、目标安装、状态和操作按钮。
 
 1. 先保存 WorkBuddy 中的工作。
 2. 点击 **一键应用**：校验提示词 → 关闭客户端 → 备份 → 同步 → 校验 → 重启。
@@ -52,7 +53,7 @@ Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，�
 
 界面会额外显示“客户端当前：已开启 / 未开启 / 部分账号已开启 / 尚无账号配置”，这是读磁盘得到的客观状态，与你的勾选分开看待。
 
-顶部橙色提示条常驻提醒：**WorkBuddy 升级后要回来重新“一键应用”**。升级会重新解包并覆盖模板、换掉旧版本插件缓存，改动会失效。
+顶部橙色提示条常驻提醒：**WorkBuddy 升级后要回来重新“一键应用”**。升级会重新解包并覆盖模板、换掉旧版本插件缓存，改动会失效。这是窗口内的第一条内容，不占用额外标题空间。
 
 界面还能：
 - **选择目标安装**：勾选要处理的安装，默认全部勾选。两套安装各自使用独立配置目录，取消勾选就不会动它。
@@ -217,6 +218,16 @@ dotnet publish src/ui/WorkBuddyUnlock.csproj -c Release -r win-x64 --self-contai
 ```
 
 GUI 为 C# / WPF 的薄壳：ViewModel 管状态，CliService 调 CLI，不在 C# 重写补丁逻辑。无 GUI 第三方依赖。
+
+GUI 版本号只有一个来源：仓库根的 `package.json`。`WorkBuddyUnlock.csproj` 构建时读取它，
+写入程序集 `Version` / `FileVersion` / `InformationalVersion`；窗口标题再从这个程序集版本拼接，
+所以标题栏、EXE 文件属性、Release 包名三者不会各自漂移（修改版本只改 `package.json`）。
+
+构建后请确认 EXE 能真的启动（例如直接双击）。`dotnet publish ... -o .` 把 PublishDir 设为仓库根目录，
+而根目录是 `src/ui/` 的祖先目录：.NET SDK 10.0.400 起会把 `$(PublishDir)/**` 加进 `DefaultItemExcludes`，
+除非项目显式声明全部条目（`EnableDefaultItems=false`），否则 `src/ui` 下的 `.cs` / `.xaml` 会被全部排除，
+出现“编译成功但编译项为 0”的假成功：EXE 或启动即崩（找不到 `mainwindow.xaml`）或窗口空白不执行任何逻辑。
+`WorkBuddyUnlock.csproj` 已显式列举条目以避开该问题，改动项目文件后请重跑 `src/tools/ui_smoke.ps1` 验证。
 
 原有回归脚本继续保留：`src/tools/compile_test.mjs`、`render_test.mjs`、`verify_diff.mjs`、`verify_json.mjs`、`verify_externalized.mjs`。
 
