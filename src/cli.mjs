@@ -188,6 +188,40 @@ function restartClients(roots, previous, options) {
   }
   return exes;
 }
+/**
+ * 客户端版本指纹。
+ *
+ * 客户端升级会重建插件缓存目录（welcomemode-<mode>/<版本>-wb.…）并可能换掉
+ * 沙箱引擎版本目录（cli/vendor/sandbox/<版本>）。这两处目录名自带版本，
+ * 无需解析 EXE 的 VERSIONINFO，跨平台且不引入额外依赖。
+ * 取不到时返回 null（不报错，仅表示无法判定升级）。
+ */
+function clientVersion(root) {
+  const found = new Set();
+  for (const cfg of configDirsForRoots([root])) {
+    const base = path.join(cfg, 'plugins', 'cache', 'workbuddy-builtin');
+    if (fs.existsSync(base)) {
+      for (const mode of fs.readdirSync(base)) {
+        const dir = path.join(base, mode);
+        let entries; try { entries = fs.readdirSync(dir); } catch { continue; }
+        const versions = entries.filter((v) => /^\d+\./.test(v)).sort();
+        if (versions.length) found.add(versions.at(-1));
+      }
+    }
+  }
+  // 沙箱引擎版本作为兜底：安装目录下 cli/vendor/sandbox/<版本>。
+  if (!found.size) {
+    const sandboxBase = path.join(root, 'resources', 'app.asar.unpacked', 'cli', 'vendor', 'sandbox');
+    if (fs.existsSync(sandboxBase)) {
+      const versions = fs.readdirSync(sandboxBase).filter((v) => /^\d/.test(v)).sort();
+      if (versions.length) found.add(versions.at(-1));
+    }
+  }
+  if (!found.size) return null;
+  // 同一安装的多份缓存可能短暂不同步，取最新的一个作为指纹。
+  return [...found].sort().at(-1);
+}
+
 function manifests() {
   if (!fs.existsSync(BACKUPS)) return [];
   return fs.readdirSync(BACKUPS).sort().flatMap((id) => {
@@ -197,7 +231,7 @@ function manifests() {
     return m.kind === 'unified' ? [{ ...m, dir: path.dirname(f) }] : [];
   });
 }
-function snapshot(edits, operation) {
+function snapshot(edits, operation, rootsForVersion = null) {
   const id = `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}`;
   const dir = path.join(BACKUPS, id); fs.mkdirSync(dir, { recursive: true });
   const entries = edits.map((e, i) => {
@@ -205,17 +239,36 @@ function snapshot(edits, operation) {
     fs.writeFileSync(path.join(dir, backup), bytes);
     return { file: e.file, backup, sha256: sha(bytes), appliedSha256: sha(e.bytes), size: bytes.length };
   });
-  const m = { id, kind: 'unified', operation, status: 'pending', createdAt: new Date().toISOString(), entries };
+  // 记录本次应用时的客户端版本指纹：下次可判定“客户端升级了、需要重新应用”。
+  // 旧备份没有这个字段，读到时为 undefined，一律当作“无法判定升级”而不误报。
+  const m = { id, kind: 'unified', operation, status: 'pending', createdAt: new Date().toISOString(), entries,
+    clientVersions: clientVersionsOf(rootsForVersion) };
   atomicWrite(path.join(dir, 'manifest.json'), JSON.stringify(m, null, 2));
   return { ...m, dir };
+}
+
+/**
+ * 本次应用涉及的安装根 → 客户端版本指纹。
+ *
+ * 传入本次实际处理的 roots，而不从 edits 的文件路径反推：
+ * 某些应用（如只改了账号偏好或提示词缓存）可能一个文件都不在安装根下，
+ * 反推会得到空对象，导致“客户端升级了”永远判定不出来。
+ */
+function clientVersionsOf(roots) {
+  const out = {};
+  for (const root of roots ?? []) {
+    const v = clientVersion(root);
+    if (v) out[root] = v;
+  }
+  return out;
 }
 function saveManifest(m) {
   const { dir, ...doc } = m;
   atomicWrite(path.join(dir, 'manifest.json'), JSON.stringify(doc, null, 2));
 }
-function transaction(edits, operation, afterWrite) {
+function transaction(edits, operation, afterWrite, rootsForVersion = null) {
   if (!edits.length) { afterWrite(); return null; }
-  const m = snapshot(edits, operation);
+  const m = snapshot(edits, operation, rootsForVersion);
   const written = [];
   try {
     for (let i = 0; i < edits.length; i++) { atomicWrite(edits[i].file, edits[i].bytes); written.push(m.entries[i]); }
@@ -326,15 +379,39 @@ function run(command, options) {
       configDir,
       configExists: fs.existsSync(path.join(configDir, 'settings.json')) || fs.existsSync(path.join(configDir, 'app', 'app-config.json')),
       promptTargets: allTargets([root], { configDirs: [configDir] }).length,
+      clientVersion: clientVersion(root),
     }));
+    // 各安装当前的客户端版本指纹（目录名自带版本，升级后会变）。
+    const currentVersions = Object.fromEntries(
+      installs.filter((i) => i.clientVersion).map((i) => [i.root, i.clientVersion]));
+    // 上次成功 apply 时记录的版本：对比即可区分“客户端升级了”与“改了提示词”。
+    const lastApply = manifests().filter((m) => m.operation === 'apply' && m.status === 'applied').at(-1) ?? null;
+    const appliedVersions = lastApply?.clientVersions ?? null;
+    // 对比范围取两边都有的键：新增安装不报升级，只关心版本真的变了。
+    const upgraded = appliedVersions
+      ? Object.entries(currentVersions)
+          .filter(([root, v]) => appliedVersions[root] && appliedVersions[root] !== v)
+          .map(([root, v]) => ({ root, from: appliedVersions[root], to: v }))
+      : [];
     return { roots, installs, promptDirectory: PROMPTS_DIR,
       targetCount: allTargets(roots, { configDirs: dirs }).length,
       pendingChanges: edits.length, changes: edits.map(({ bytes, ...e }) => e),
+      clientVersions: currentVersions,
+      appliedVersions,
+      upgraded,
+      // 供界面直接展示的结论：是否需要重新应用、原因是什么。
+      // needApply 只看 pendingChanges —— 内容比对已能覆盖升级覆盖模板、改提示词两种情况。
+      // applyReason 仅用于解释，不参与判定：
+      //   内容已同步时一律报 in-sync（即使版本指纹变了，也不谎称“待重新应用”，
+      //   否则升级后只要没重新 apply 就会永久挂着一条假告警）；
+      //   内容不同步时，看版本指纹是否变了，来解释“是升级弄的”还是“你改了提示词”。
+      needApply: edits.length > 0,
+      applyReason: edits.length === 0 ? 'in-sync' : (upgraded.length ? 'upgraded' : 'prompt-changed'),
       security: { sandboxSafetyEnabled: s.sandboxSafetyEnabled ?? null, fileRules: s.fileRules,
         commandRules: s.commandRules, networkRules: s.networkRules,
         programBlacklist: s.programBlacklist ?? null, deleteProtection: s.deleteProtection ?? null,
         fullAccess: s.fullAccess ?? null },
-      latestBackup: manifests().filter((m) => m.operation === 'apply' && m.status === 'applied').at(-1)?.id ?? null };
+      latestBackup: lastApply?.id ?? null };
   };
   if (['status', 'preview', 'verify'].includes(command)) {
     const data = inspect();
@@ -351,7 +428,7 @@ function run(command, options) {
       const backup = transaction(edits, 'apply', () => {
         if (plan(roots, options).length) throw error('VERIFY_FAILED', '应用后仍有未同步文件');
         recordPrompts();
-      });
+      }, roots);
       return { changed: edits.length, backup, restarted: restartClients(roots, previous, options),
         message: edits.length ? '已应用并校验；新会话使用新提示词' : '已是当前提示词，无需改动' };
     } catch (e) { restartClients(roots, previous, options); throw e; }

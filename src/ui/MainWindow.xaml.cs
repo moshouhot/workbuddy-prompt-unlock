@@ -20,6 +20,9 @@ public partial class MainWindow : Window
         Loaded += async (_, _) =>
         {
             await model.InitializeAsync();
+            // 实时复查：窗口开着就持续判断“是否还需要一键应用”，
+            // 让客户端升级／回写导致的失效被自动发现，不靠用户自己记得。
+            model.StartWatching();
             var args = Environment.GetCommandLineArgs();
             var screenshot = Array.IndexOf(args, "--screenshot");
             if (screenshot >= 0 && args.Length > screenshot + 1)
@@ -47,6 +50,7 @@ public partial class MainWindow : Window
     protected override void OnClosing(CancelEventArgs e)
     {
         if (!model.IsIdle) { e.Cancel = true; return; } // Never abandon a file transaction halfway.
+        model.StopWatching(); // 关窗后停止后台复查，不留续跑任务。
         base.OnClosing(e);
     }
 }

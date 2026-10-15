@@ -50,6 +50,8 @@ try {
     Put (Join-Path $env:WORKBUDDY_CONFIG_DIR 'app\app-config.json') '{"sandboxSafetyEnabled":true}'
     $prefPath = Join-Path $env:WORKBUDDY_CONFIG_DIR 'storage\user-test-personal\global\preferences.json'
     Put $prefPath '{ "theme": "light", "language": "zh-CN", "localTaskPermissionMode": "default-sandbox" }'
+    # 插件缓存中的版本化目录：CLI 从目录名取客户端版本指纹，横幅会展示它。
+    Put (Join-Path $env:WORKBUDDY_CONFIG_DIR 'plugins\cache\workbuddy-builtin\welcomemode-code\5.8.2-wb.1.aaa\prompt.tpl') '<content_policy>original</content_policy>'
     $original = (Get-FileHash $target).Hash
     $process = Start-Process $exe -PassThru
     WaitUntil { $process.Refresh(); $process.MainWindowHandle -ne 0 }
@@ -67,6 +69,13 @@ try {
             [System.Windows.Automation.ControlType]::Text))) | ForEach-Object { $_.Current.Name }
     if ($titleTexts -contains 'WorkBuddy Prompt Unlock') { throw 'Content area must not repeat the app title' }
     if ($titleTexts -match '本地提示词管理') { throw 'Content area must not repeat the subtitle' }
+    # 实时同步横幅：启动时内容未同步，必须显示告警态且带客户端版本。
+    if ((FindId 'SyncHeadline').Current.Name -notmatch '检测到 \d+ 个文件需要同步') {
+        throw "Need-apply banner expected, got: $((FindId 'SyncHeadline').Current.Name)"
+    }
+    if ((FindId 'SyncDetail').Current.Name -notmatch '客户端版本') {
+        throw "Banner detail must carry client version, got: $((FindId 'SyncDetail').Current.Name)"
+    }
     # Inspect the real tree first, then invoke controls by their observed IDs.
     $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object {
         if ($_.Current.AutomationId) { Write-Host $_.Current.ControlType.ProgrammaticName $_.Current.AutomationId $_.Current.IsEnabled }
@@ -110,19 +119,33 @@ try {
     if ($app.sandboxSafetyEnabled -ne $true) { throw 'Restore did not recover security setting' }
     if ((Get-Content $prefPath -Raw | ConvertFrom-Json).localTaskPermissionMode -ne 'default-sandbox') { throw 'Restore did not recover permission mode' }
     if ((FindId 'Restore').Current.IsEnabled) { throw 'No remaining apply backup: Restore must disable' }
-    $window.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
-    $process.WaitForExit(10000) | Out-Null
     if ($Screenshots) {
         $docs = Join-Path $project 'docs'; [IO.Directory]::CreateDirectory($docs) | Out-Null
+        # 此处刚 restore 完，磁盘状态=“需要同步”，截图进程是只读的，
+        # 所以 normal/compact150 抓到的是告警（橙色）横幅。
         foreach ($variant in @('normal','compact150')) {
             $file = Join-Path $docs ("ui-synthetic-$variant.png")
             $arguments = @('--screenshot', ('"' + $file + '"'))
             if ($variant -eq 'compact150') { $arguments += @('--compact','--scale150') }
             $p = Start-Process $exe -ArgumentList $arguments -PassThru
             if (!$p.WaitForExit(60000)) { $p.Kill(); throw 'Screenshot process timed out' }
-            if (!(Test-Path $file)) { throw 'Screenshot missing' }
+            if (!(Test-Path $file)) { throw "Screenshot missing: $file" }
         }
+        # 已同步态：再应用一次把内容同步，横幅应转为「无需操作」，再截绿横幅。
+        $beforeShot = LogText
+        Click 'Apply'
+        WaitUntil { (LogText) -ne $beforeShot -and (LogText).Contains('"changed"') } 'apply for synced state'
+        WaitUntil { (FindId 'Apply').Current.IsEnabled } 'idle before synced state'
+        if ((FindId 'SyncHeadline').Current.Name -notmatch '无需操作') {
+            throw "Synced state must say 无需操作, got: $((FindId 'SyncHeadline').Current.Name)"
+        }
+        $synced = Join-Path $docs 'ui-synthetic-synced.png'
+        $p = Start-Process $exe -ArgumentList @('--screenshot', $synced) -PassThru
+        if (!$p.WaitForExit(60000)) { $p.Kill(); throw 'Screenshot process timed out' }
+        if (!(Test-Path $synced)) { throw "Screenshot missing: $synced" }
     }
+    $window.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
+    $process.WaitForExit(10000) | Out-Null
     Write-Host 'PASS: UI preview, security checkbox, apply, restore, button states, byte parity, close'
     Write-Host 'PASS: title bar carries name + version + language; no duplicated title/subtitle in content'
 } finally {

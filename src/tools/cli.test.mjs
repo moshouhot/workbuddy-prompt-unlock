@@ -83,6 +83,61 @@ test('JSON help, preview, prompt validation, apply + security, edits, undo, conf
   assert.equal(cli('backups').data.backups.length, 3); // apply, apply, restore
 });
 
+test('status reports needApply verdict, client version, and upgrade attribution', () => {
+  // 复位为“内容不同步”：目标模板恢复为官方内容。
+  put(path.join(templates, 'workbuddy-craft-code-prompt.tpl'), template);
+  const s1 = cli('status').data;
+  // 判定字段必须与 pendingChanges 一致，界面直接拿它显示“要不要点一键应用”。
+  assert.equal(typeof s1.needApply, 'boolean');
+  assert.equal(s1.needApply, s1.pendingChanges > 0);
+  assert.equal(s1.needApply, true);
+  // 本次没改过客户端版本，应归因为“改了提示词”，而不是谎称升级。
+  assert.equal(s1.applyReason, 'prompt-changed');
+  assert.equal(typeof s1.clientVersions, 'object');
+  // 前面的用例已 apply 过，所以此处 appliedVersions 可能已有指纹；只要求类型正确。
+  assert.ok(s1.appliedVersions === null || typeof s1.appliedVersions === 'object');
+  assert.ok(Array.isArray(s1.upgraded));
+
+  // 应用后应变为已同步，并记录本次的客户端版本指纹。
+  assert.equal(cli('apply').ok, true);
+  const s2 = cli('status').data;
+  assert.equal(s2.pendingChanges, 0);
+  assert.equal(s2.needApply, false);
+  assert.equal(s2.applyReason, 'in-sync');
+  assert.equal(s2.upgraded.length, 0);
+
+  // 模拟客户端升级：换掉插件缓存版本目录名，同时让内容保持同步。
+  // 关键约束：版本指纹变了但内容已同步时，不得谎报“需要重新应用”。
+  // 先应用一次，使模板与缓存都进入已同步状态。
+  const cacheBase = path.join(config, 'plugins/cache/workbuddy-builtin/welcomemode-code');
+  fs.rmSync(cacheBase, { recursive: true, force: true });
+  put(path.join(cacheBase, '5.8.2-wb.1.aaa/prompt.tpl'), template);
+  assert.equal(cli('apply').ok, true);
+  assert.equal(cli('status').data.needApply, false);
+  // 现在仅把版本目录名换成新版本（内容逐字节相同）——等价于升级后缓存被重建但内容已同步。
+  fs.renameSync(path.join(cacheBase, '5.8.2-wb.1.aaa'), path.join(cacheBase, '5.9.9-wb.99999999.gdeadbeef.hcafebabe'));
+  const s3 = cli('status').data;
+  assert.equal(s3.needApply, false, 'content is in sync: must not raise a false alarm after upgrade');
+  assert.equal(s3.applyReason, 'in-sync');
+  assert.equal(s3.upgraded.length, 1, 'version drift should still be reported for explanation');
+  assert.match(s3.upgraded[0].from, /^5\./);
+  assert.equal(s3.upgraded[0].to, '5.9.9-wb.99999999.gdeadbeef.hcafebabe');
+
+  // 升级后又把模板改回官方内容（真实升级会覆盖模板）：应归因为升级。
+  put(path.join(templates, 'workbuddy-craft-code-prompt.tpl'), template);
+  const s4 = cli('status').data;
+  assert.equal(s4.needApply, true);
+  assert.equal(s4.applyReason, 'upgraded');
+
+  // 收尾：应用一次并清理升级模拟，把基线还原给后续用例（它们假设内容不同步）。
+  assert.equal(cli('apply').ok, true);
+  fs.rmSync(cacheBase, { recursive: true, force: true });
+  put(path.join(cacheBase, '5.8.2-wb.1.aaa/prompt.tpl'), template);
+  assert.equal(cli('apply').ok, true);
+  // 还原为“待同步”基线：模板回到官方内容。
+  put(path.join(templates, 'workbuddy-craft-code-prompt.tpl'), template);
+});
+
 test('full access preference defaults on, preserves sibling fields, and can be disabled', () => {
   // 前面的测试已 apply 过，先重置为关闭，让本测试自包含。
   const base = { theme: 'light', language: 'zh-CN', localTaskPermissionMode: 'default-sandbox' };

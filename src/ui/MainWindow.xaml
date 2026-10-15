@@ -5,12 +5,19 @@
  UseLayoutRounding="True" SnapsToDevicePixels="True" Icon="unlock.ico">
  <Grid Margin="24,18,24,20">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <Border Grid.Row="0" Background="#FFF4E5" BorderBrush="#E8A33D" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12"
-    AutomationProperties.AutomationId="UpgradeNotice">
+  <!-- 实时同步状态：由 CLI 的内容比对（pendingChanges）得出结论，不是提醒文案。
+       需要应用时配色为告警橙，已同步时转为平静的绿色，无需读文字也能一眼分辨。 -->
+  <Border Grid.Row="0" CornerRadius="8" Padding="14,12" Margin="0,0,0,12"
+    AutomationProperties.AutomationId="SyncBanner"
+    Background="{Binding NeedApply, Converter={StaticResource SyncBg}}"
+    BorderBrush="{Binding NeedApply, Converter={StaticResource SyncBorder}}">
    <StackPanel>
-    <TextBlock Text="⚠  WorkBuddy 升级后，请回来重新点一次“一键应用”" FontWeight="Bold" Foreground="#8A5300" TextWrapping="Wrap"/>
-    <TextBlock Text="升级会重新解包并覆盖模板，同时清掉旧版本插件缓存，提示词改动会失效。重新应用后对新版本生效。"
-     FontSize="12" Foreground="#8A5300" TextWrapping="Wrap" Margin="0,5,0,0"/>
+    <TextBlock Text="{Binding SyncHeadline}" FontWeight="Bold" TextWrapping="Wrap"
+      AutomationProperties.AutomationId="SyncHeadline"
+      Foreground="{Binding NeedApply, Converter={StaticResource SyncFg}}"/>
+    <TextBlock Text="{Binding SyncDetail}" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"
+      AutomationProperties.AutomationId="SyncDetail"
+      Foreground="{Binding NeedApply, Converter={StaticResource SyncFg}}" Opacity="0.85"/>
    </StackPanel>
   </Border>
   <Border Grid.Row="1" Background="White" BorderBrush="#DCE4E7" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,12">
@@ -44,7 +51,7 @@
     <TextBlock Text="取消勾选不会把已关闭的开关恢复回去，也不改动凭据检测。"
      FontSize="12" Foreground="#647680" TextWrapping="Wrap" Margin="24,0,0,10"/>
     <WrapPanel>
-     <Button Content="一键应用" Command="{Binding ApplyCommand}" Background="{StaticResource Accent}" Foreground="White" BorderBrush="{StaticResource Accent}" AutomationProperties.AutomationId="Apply"/>
+     <Button Content="一键应用" Command="{Binding ApplyCommand}" Background="{Binding NeedApplyHighlight, Converter={StaticResource ApplyAccent}}" Foreground="White" BorderBrush="{Binding NeedApplyHighlight, Converter={StaticResource ApplyAccent}}" AutomationProperties.AutomationId="Apply"/>
      <Button Content="预览" Command="{Binding PreviewCommand}" AutomationProperties.AutomationId="Preview"/>
      <Button Content="撤销上次应用" Command="{Binding RestoreCommand}" AutomationProperties.AutomationId="Restore"/>
     </WrapPanel>

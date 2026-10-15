@@ -32,7 +32,7 @@ node wb.mjs status --root="D:\Program Files\WorkBuddy" --json
 
 ### 用 Release 包（推荐）
 
-在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.5.2-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 **`WorkBuddyUnlock.exe`** 即可。
+在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.6.0-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 **`WorkBuddyUnlock.exe`** 即可。
 
 Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，也不需要联网。
 
@@ -41,7 +41,7 @@ Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，�
 ## 人使用：一键完成
 
 双击项目根目录下的 **`WorkBuddyUnlock.exe`**（WPF 应用，本身不弹命令行窗口）。
-窗口标题栏显示**软件名 + 版本号 + 实现语言**（如 `WorkBuddy Prompt Unlock v1.5.2 · C#`）；版本号来自 `package.json`，与 Release 包名、EXE 文件属性一致。窗口内容区不重复主标题/副标题，打开窗口即看到升级提醒、目标安装、状态和操作按钮。
+窗口标题栏显示**软件名 + 版本号 + 实现语言**（如 `WorkBuddy Prompt Unlock v1.6.0 · C#`）；版本号来自 `package.json`，与 Release 包名、EXE 文件属性一致。窗口内容区不重复主标题/副标题，打开窗口即看到实时同步状态、目标安装和操作按钮。
 
 1. 先保存 WorkBuddy 中的工作。
 2. 点击 **一键应用**：校验提示词 → 关闭客户端 → 备份 → 同步 → 校验 → 重启。
@@ -53,7 +53,20 @@ Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，�
 
 界面会额外显示“客户端当前：已开启 / 未开启 / 部分账号已开启 / 尚无账号配置”，这是读磁盘得到的客观状态，与你的勾选分开看待。
 
-顶部橙色提示条常驻提醒：**WorkBuddy 升级后要回来重新“一键应用”**。升级会重新解包并覆盖模板、换掉旧版本插件缓存，改动会失效。这是窗口内的第一条内容，不占用额外标题空间。
+窗口顶部是**实时同步状态**，直接告诉你要不要动手，不用靠记忆：
+
+| 状态 | 含义 |
+|---|---|
+| ⚠ **检测到 N 个文件需要同步，请点“一键应用”**（橙色） | 客户端内容与当前提示词不一致，需要重新应用 |
+| ✓ **客户端已是当前提示词，无需操作**（绿色） | 已同步，不必做任何事 |
+
+它由 CLI 的逐字节内容比对（`pendingChanges`）得出结论，不是提醒文案，因此能自动发现两种情况：
+**客户端升级覆盖了模板**、以及**你自己改了 `prompts/`**。窗口开着时每 20 秒自动复查一次
+（空闲时才查，不与应用/撤销抢操作），改完会自己变，不需要手动刷新。
+
+两个状态的可视样例：`docs/ui-synthetic-normal.png`（待同步）与 `docs/ui-synthetic-synced.png`（已同步）。
+
+“一键应用”按钮会在待同步时变为告警色，已同步时回到主题绿。
 
 界面还能：
 - **选择目标安装**：勾选要处理的安装，默认全部勾选。两套安装各自使用独立配置目录，取消勾选就不会动它。
@@ -98,12 +111,15 @@ WorkBuddy 与 WorkBuddyAI 各有**自己的用户配置目录**，插件缓存�
 
 | 安装 | 版本（本机实测） | 配置目录 |
 |---|---|---|
-| `WorkBuddy`（国内版） | 5.7.7 | `~/.workbuddy` |
+| `WorkBuddy`（国内版） | 5.8.2 | `~/.workbuddy` |
 | `WorkBuddyAI` | 5.7.6 | `~/.workbuddy-ai` |
 
 只改其中一个安装时，另一个的插件缓存副本会保持原样。界面默认**全部勾选**；CLI 用 `--install` 只处理指定安装。`node wb.mjs installs --json` 会列出每个安装及其配对配置目录。
 
-> **升级后记得回来重新“一键应用”。** 官方升级会重新解包并覆盖模板、同时换掉旧版本插件缓存，之前的提示词改动会失效。
+> **升级后不必自己记。** 界面顶部的实时状态会自动发现升级导致的失效（内容比对，不是提醒文案）；
+> CLI 的 `status` 也会给出 `needApply` 与 `applyReason`（`upgraded` / `prompt-changed` / `in-sync`）。
+> 其中 `applyReason=upgraded` 需要上次 apply 留有版本指纹；升级前旧版本产生的备份没这个字段，
+> 此时只能报 `prompt-changed`（仅影响“原因描述”，不影响“是否需要应用”的判定）。
 
 可选安全配置：
 
@@ -152,6 +168,20 @@ node wb.mjs ui-remember --state="{\"fullAccess\":true,\"includeSecurity\":true}"
 > 登录企业账号时「一键应用」会报成功但客户端仍显示“默认权限”；现已改为匹配全部 `user-*` 账号目录。
 
 `status`/`verify` 的 `security.fullAccess` 会报告当前状态（`true` / `false` / `"mixed"` 表示部分账号未开 / `null` 表示尚无偏好文件）。
+
+`status` / `preview` / `verify` 还会报告实时同步判定，供界面与脚本直接使用：
+
+| 字段 | 说明 |
+|---|---|
+| `needApply` | 是否需要重新应用，等同 `pendingChanges > 0` |
+| `applyReason` | `in-sync` / `prompt-changed` / `upgraded`（仅解释，不参与判定） |
+| `clientVersions` | 各安装当前的客户端版本指纹（取自插件缓存/沙箱引擎的版本化目录名） |
+| `appliedVersions` | 上次成功 `apply` 时记录的版本指纹；无记录为 `null` |
+| `upgraded` | 版本指纹发生变化的安装（`{root, from, to}`） |
+
+> `needApply` **只看内容比对**，不单凭版本指纹告警：否则升级后只要没重新应用，
+> 就会一直挂着一条“内容其实已同步”的假告警。版本指纹只用来把原因从
+> “你改了提示词”区分成“客户端升级弄的”。
 
 成功示例：
 

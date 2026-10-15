@@ -29,6 +29,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="App.xaml.cs" />
+    <Compile Include="BoolBrushConverter.cs" />
     <Compile Include="CliService.cs" />
     <Compile Include="MainViewModel.cs" />
     <Compile Include="MainWindow.xaml.cs" />

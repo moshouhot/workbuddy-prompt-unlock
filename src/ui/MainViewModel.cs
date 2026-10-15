@@ -66,6 +66,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool FullAccess { get => fullAccess; set { if (fullAccess == value) return; fullAccess = value; Notify(); Remember(); } }
     public string Status { get => status; private set { status = value; Notify(); } }
     public string InstallSummary { get => installSummary; private set { installSummary = value; Notify(); } }
+
+    private bool needApply;
+    private string syncHeadline = "正在检查客户端…", syncDetail = "";
+    /// <summary>是否检测到需要重新应用（由 CLI 的内容比对得出，非启发式）。</summary>
+    public bool NeedApply { get => needApply; private set { needApply = value; Notify(); Notify(nameof(NeedApplyHighlight)); } }
+    /// <summary>状态横幅主句：直接告诉用户现在要不要点“一键应用”。</summary>
+    public string SyncHeadline { get => syncHeadline; private set { syncHeadline = value; Notify(); } }
+    /// <summary>状态横幅补充句：说明原因与客户端版本。</summary>
+    public string SyncDetail { get => syncDetail; private set { syncDetail = value; Notify(); } }
+    /// <summary>需要应用时把按钮画成告警色，不用读文字也知道要动手。</summary>
+    public bool NeedApplyHighlight => NeedApply;
     public string Log { get => log; private set { log = value; Notify(); } }
     public PromptFile? SelectedPrompt { get => selectedPrompt; set { selectedPrompt = value; Notify(); RefreshCommands(); } }
     public UiCommand ApplyCommand { get; }
@@ -136,6 +147,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = count == 0 ? "提示词已同步" : $"有 {count} 个文件待同步";
         InstallSummary = string.Join("\n", data.GetProperty("roots").EnumerateArray().Select(x => x.GetString()));
         hasBackup = data.GetProperty("latestBackup").ValueKind != JsonValueKind.Null;
+        UpdateSyncVerdict(data, count);
         // 不把 security.fullAccess 回填到开关：开关代表用户意图，磁盘状态只作客观展示。
         // 否则手动改过 preferences.json 或客户端升级重置后，开关会被静默改掉。
         if (data.TryGetProperty("security", out var sec) && sec.TryGetProperty("fullAccess", out var fa))
@@ -149,6 +161,40 @@ public sealed class MainViewModel : INotifyPropertyChanged
             };
         }
         RefreshCommands();
+    }
+
+    /// <summary>
+    /// 实时结论：现在要不要点“一键应用”。
+    ///
+    /// 判定依据是 CLI 的 pendingChanges（逐字节内容比对），它能同时覆盖两种情况：
+    /// 客户端升级把模板改回官方内容、用户自己改了 prompts/。
+    /// 版本指纹（applyReason=upgraded）只用来解释原因，不单独触发告警：
+    /// 否则升级后只要没重新应用，就会永久挂着一条明知内容已同步的假告警。
+    /// </summary>
+    private void UpdateSyncVerdict(System.Text.Json.JsonElement data, int count)
+    {
+        var reason = data.TryGetProperty("applyReason", out var r) ? r.GetString() : null;
+        var versions = new List<string>();
+        if (data.TryGetProperty("installs", out var inst) && inst.ValueKind == JsonValueKind.Array)
+            foreach (var i in inst.EnumerateArray())
+                if (i.TryGetProperty("clientVersion", out var v) && v.ValueKind == JsonValueKind.String
+                    && i.TryGetProperty("name", out var n))
+                    versions.Add($"{n.GetString()} {v.GetString()!.Split('-')[0]}");
+        var versionText = versions.Count > 0 ? $"　客户端版本：{string.Join("、", versions)}" : "";
+
+        NeedApply = count > 0;
+        if (count > 0)
+        {
+            SyncHeadline = $"⚠  检测到 {count} 个文件需要同步，请点“一键应用”";
+            SyncDetail = (reason == "upgraded"
+                ? "客户端版本已变化，官方升级会覆盖模板并换掉旧插件缓存，之前的改动已失效。"
+                : "提示词文件与客户端内容不一致（你改过 prompts/，或客户端回写了文件）。") + versionText;
+        }
+        else
+        {
+            SyncHeadline = "✓  客户端已是当前提示词，无需操作";
+            SyncDetail = "此状态会自动复查；执行“一键应用”后，或客户端升级后，这里会立即更新。" + versionText;
+        }
     }
 
     private string fullAccessOnDisk = "";
@@ -165,6 +211,52 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Notify(nameof(IncludeSecurity));
         Notify(nameof(FullAccess));
     }
+
+    /// <summary>
+    /// 后台定时复查是否需要重新应用。
+    ///
+    /// 这是“实时判断”的核心：窗口只要开着，即使什么也不做，也会发现客户端升级／回写
+    /// 导致的待同步，不必等用户下次手动打开窗口才发现。
+    /// 间隔 20 秒：单次 status 实测约 0.5～0.7 秒；空闲时跳过，不与应用/撤销等写入操作抢锁。
+    /// </summary>
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(20);
+    private CancellationTokenSource? pollCts;
+
+    public void StartWatching()
+    {
+        pollCts = new CancellationTokenSource();
+        var token = pollCts.Token;
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try { await Task.Delay(PollInterval, token); } catch (TaskCanceledException) { return; }
+                // 仅在空闲时复查：与 apply/restore 互斥，避免并发读写与按钮状态闪动。
+                if (!IsIdle || token.IsCancellationRequested) continue;
+                try
+                {
+                    // Flags() 会读绑定到 UI 的 Installs 集合，必须在 UI 线程上算；
+                    // 算完再回到后台跑 CLI，避免跨线程访问 ObservableCollection。
+                    var flags = System.Windows.Application.Current?.Dispatcher.Invoke(() => Flags(false));
+                    if (flags is null) continue;
+                    var data = await service.RunAsync("status", flags);
+                    if (token.IsCancellationRequested) return;
+                    var count = data.GetProperty("pendingChanges").GetInt32();
+                    // 后台线程只算结果，回到 UI 线程再改属性（WPF 绑定要求）。
+                    System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                    {
+                        if (token.IsCancellationRequested) return;
+                        UpdateSyncVerdict(data, count);
+                        hasBackup = data.GetProperty("latestBackup").ValueKind != JsonValueKind.Null;
+                        RefreshCommands();
+                    });
+                }
+                catch { /* 后台复查失败不打扰用户，下次再试 */ }
+            }
+        }, token);
+    }
+
+    public void StopWatching() => pollCts?.Cancel();
 
     /// <summary>首次加载安装列表：默认全部勾选，避免漏同步某一套安装的独立缓存副本。</summary>
     private async Task LoadInstallsAsync()

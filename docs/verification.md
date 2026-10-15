@@ -9,7 +9,7 @@
 
 ## 自动测试
 
-`npm test`：6 项全部通过，覆盖：
+`npm test`：7 项全部通过，覆盖：
 
 1. JSON 帮助/参数/输出，preview 无写入，提示词错误不写入，提示词与安全配置一体备份/应用，重复应用无变化，三个 content_policy 和两个 new 文本的后续编辑，字面量 `$&` / `$1` / `$$`，撤销、冲突与备份列表。
 2. 操作锁、最新企业托管状态、缺少配置、说明段缺少历史时明确报错。
@@ -18,6 +18,9 @@
 5. 企业账号目录（`user-<uid>-<企业短名>`，非 `-personal` 结尾）同样会被写入；没有偏好文件的账号目录不被新建。
    该用例已用反向验证确认：把匹配回退为旧实现 `/-personal$/` 时它确实失败。
 6. 界面勾选偏好默认“两个都开启”，且跨进程记住上次选择。
+7. 实时同步判定：`needApply` 与 `pendingChanges` 一致；改提示词归因 `prompt-changed`；apply 后转 `in-sync`。
+   并验证**升级后不误报**：仅把插件缓存版本目录改名（内容逐字节相同）时，`needApply` 仍为 false，
+   同时 `upgraded` 能报出 `from`/`to`；再把模板改回官方内容则归因为 `upgraded`。
 
 所有写入测试使用独立临时安装/配置/提示词目录，不修改生产客户端。
 
@@ -39,10 +42,24 @@ Release 发布成功（.NET 8 WPF / win-x64 / framework-dependent single-file GU
 
 截图为**临时假安装的合成数据**：
 
-- `ui-synthetic-normal.png`：常规窗口，96 DPI 渲染。
+- `ui-synthetic-normal.png`：常规窗口，96 DPI 渲染（顶部横幅为「需要同步」告警态）。
 - `ui-synthetic-compact150.png`：最小窗口，144 DPI 渲染；不是修改显示器缩放的物理 DPI 验收。
+- `ui-synthetic-synced.png`：已同步态横幅（绿色）。由 `ui_smoke.ps1 -Screenshots` 生成前先 apply 一次才能得到该态，
+  因此单独保存在 `docs/` 供对照；重生成方式见该脚本末尾的截图分支。
 
 截图不在仓库内（由本机 `src/tools/ui_smoke.ps1 -Screenshots` 生成到 `docs/`，已由 `.gitignore` 排除）。
+
+## GUI 实时性（单独用例）
+
+`powershell -NoProfile -ExecutionPolicy Bypass -File src/tools/ui_live_state.ps1`：
+
+验证“窗口开着就会自己发现要不要重新应用”，全程不手动刷新：
+
+1. 起始横幅为「检测到 N 个文件需要同步」（告警色）且详情带客户端版本；
+2. 点“一键应用”后自动变「✓ 客户端已是当前提示词，无需操作」（不需要手动刷新）；
+3. **从外部把目标文件改回官方内容**（模拟客户端升级覆盖），不点任何按钮，
+   20 秒轮询内自动变回「检测到 1 个文件需要同步」；
+4. 再应用一次并等一轮完整轮询，确认稳定在「无需操作」——轮询不会产生假告警。
 
 最小窗口（640×800）下已逐项确认：日志区可读；长安装路径在勾选行内换行（不硬切）；最长提示词标签（“Agent / Expert 内容策略 · content_policy.craft-expert.txt”≈440px，超出可用宽约 342px）改用省略号 + 悬停全称；按钮与 footer 未裁切。
 

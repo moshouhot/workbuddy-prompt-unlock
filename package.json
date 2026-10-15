@@ -1,6 +1,6 @@
 {
   "name": "workbuddy-prompt-unlock",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "description": "WorkBuddy local prompt manager: AI JSON CLI and human WPF UI",
