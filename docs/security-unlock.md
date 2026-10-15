@@ -161,3 +161,34 @@ node security-unlock.mjs restore --backup=<ID>    还原指定
   `tsbx_rules.json` 在 `app.asar` 里有 SHA256 记录，但**运行时无校验**（CLI 代码中 `verifyFileIntegrity` / `checkIntegrity` 等函数计数均为 0），实测修改后客户端正常启动、零错误日志。
 - **客户端升级会重置**：升级会重新解包覆盖 `tsbx_rules.json`；`settings.json` 通常保留（在用户目录），但建议升级后重新跑一次 `status` 确认。
 - **服务端策略无法绕过**：托管策略、服务端内容审核不在本工具范围内。
+
+---
+
+## 附：「允许完全访问」的账号目录规则
+
+这个开关不在 `settings.json`，而在每个账号的全局偏好文件里：
+
+```text
+<配置目录>/storage/user-<uid>-<企业短名或 personal>/global/preferences.json
+    -> localTaskPermissionMode: 'full-access' | 'default-sandbox'
+```
+
+目录名与客户端一致（`app.asar` 中的 `userStorageDirName`）：
+
+```js
+function userStorageDirName(e, t) { return `user-${e}-${t?.trim() || `personal`}` }
+```
+
+即个人账号是 `user-<uid>-personal`，**企业账号是 `user-<uid>-<企业短名>`**（例如
+`user-31b1c5da-…-fylzonuezfnk`，对应 `daemon.log` 里的 `/v2/enterprises/fylzonuezfnk/…`）。
+
+本工具早期只匹配 `/-personal$/`，登录企业账号时该目录被静默跳过：`apply` 报成功、
+`status` 报 `fullAccess: true`（它只看了 `-personal` 文件），而客户端读的那个文件从未被写入，
+界面上仍显示“默认权限”。现改为匹配全部 `user-*` 账号目录。
+
+客户端还有一道开关展示门（`isFullAccessAllowed()` 读 `securityCenter:getState` 的
+`showDefaultPermission`，默认 `!== false` 即展示），它只影响开关是否展示，不改变偏好取值。
+判断门是否打开可看 `daemon.log` 的 `[SecurityCenter] managed policy resolved … showDefaultPermission=…`。
+
+`apply` 只写已存在的偏好文件并保留同文件其他字段，不会新建账号目录；
+`status` / `verify` 的 `security.fullAccess` 为 `true` / `false` / `"mixed"`（部分账号未开）/ `null`（尚无偏好文件）。

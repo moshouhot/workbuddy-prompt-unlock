@@ -88,13 +88,22 @@ function findTsbxRules(roots) {
  */
 const FULL_ACCESS = 'full-access';
 
-/** 各账号的全局偏好文件（localTaskPermissionMode 存于此）。 */
+/**
+ * 各账号的全局偏好文件（localTaskPermissionMode 存于此）。
+ *
+ * 目录名规则来自客户端代码（app.asar 中 userStorageDirName）：
+ *     `user-${uid}-${enterpriseId?.trim() || `personal`}`
+ * 即企业账号是 `user-<uid>-<企业短名>`，个人账号才是 `user-<uid>-personal`。
+ * 早先这里只匹配 /-personal$/，登录企业账号时目录不以 -personal 结尾而被整条跳过，
+ * 导致「一键应用」报成功、客户端仍显示“默认权限”。因此改为匹配全部 user-* 账号目录。
+ */
 function findPreferenceFiles(configDir = CONFIG_DIR) {
   const storage = path.join(configDir, 'storage');
   if (!fs.existsSync(storage)) return [];
   const out = [];
   for (const dir of fs.readdirSync(storage).sort()) {
-    if (!/-personal$/.test(dir)) continue;
+    // 只认账号目录；device/ skeleton/ 等非 user-* 目录自然被排除。
+    if (!/^user-/.test(dir)) continue;
     const f = path.join(storage, dir, 'global', 'preferences.json');
     if (fs.existsSync(f)) out.push(f);
   }

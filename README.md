@@ -47,7 +47,7 @@ Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，�
 2. 点击 **一键应用**：校验提示词 → 关闭客户端 → 备份 → 同步 → 校验 → 重启。
 3. 如需一起处理之前的安全配置，勾选 **同时放开本地安全配置**。默认不改变安全开关现状，也不会自动恢复已关闭的开关。
 
-**允许完全访问**默认开启，不依赖上面的安全配置勾选：它把新任务的默认权限模式设为“允许完全访问”，减少逐条确认。存储在 `<配置目录>/storage/user-<uid>-personal/global/preferences.json` 的 `localTaskPermissionMode`（`full-access` / `default-sandbox`）。只改已登录账号的偏好文件，保留同文件里的主题、语言等字段；没有账号目录时不会新建。CLI 用 `--no-full-access` 可关闭。
+**允许完全访问**默认开启，不依赖上面的安全配置勾选：它把新任务的默认权限模式设为“允许完全访问”，减少逐条确认。存储在 `<配置目录>/storage/user-<uid>-<企业短名或 personal>/global/preferences.json` 的 `localTaskPermissionMode`（`full-access` / `default-sandbox`）。目录名规则与客户端一致（`userStorageDirName`）：个人账号是 `user-<uid>-personal`，**企业账号是 `user-<uid>-<企业短名>`**；只写已有的偏好文件，保留同文件里的主题、语言等字段，没有该文件的账号目录不会新建。CLI 用 `--no-full-access` 可关闭。
 
 两个勾选**默认都开启**，且会被**记住**：写入 `.state/ui-preferences.json`，下次打开恢复上次选择。首次运行（或删除该文件）回到“两个都开启”。“取消勾选”表示**本次不改**，不会把已开启的开关恢复回去；它也不会改动凭据检测。
 
@@ -144,9 +144,12 @@ node wb.mjs ui-remember --state="{\"fullAccess\":true,\"includeSecurity\":true}"
 
 指新任务的默认权限模式，对应界面输入框上方的同名开关。它决定新任务是否逐条请求确认，与沙箱规则、提示词是三个独立层面：
 
-- 存储：`<配置目录>/storage/user-<uid>-personal/global/preferences.json` 的 `localTaskPermissionMode`
+- 存储：`<配置目录>/storage/user-<uid>-<企业短名或 personal>/global/preferences.json` 的 `localTaskPermissionMode`
 - 取值：`full-access`（开）/ `default-sandbox`（关，客户端默认值）
 - 工具行为：`apply` 时**默认开启**（无需 `--security`）；只改已存在的偏好文件，不新建账号目录，并保留主题、语言等其他字段
+
+> 企业账号目录（`user-<uid>-<企业短名>`）同样会被处理。早期版本只匹配 `-personal` 结尾的目录，
+> 登录企业账号时「一键应用」会报成功但客户端仍显示“默认权限”；现已改为匹配全部 `user-*` 账号目录。
 
 `status`/`verify` 的 `security.fullAccess` 会报告当前状态（`true` / `false` / `"mixed"` 表示部分账号未开 / `null` 表示尚无偏好文件）。
 

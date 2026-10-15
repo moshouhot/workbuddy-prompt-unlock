@@ -110,6 +110,39 @@ test('full access preference defaults on, preserves sibling fields, and can be d
   assert.equal(cli('status').data.security.fullAccess, false);
 });
 
+test('full access covers enterprise account dirs, not just -personal', () => {
+  // 客户端目录名规则（app.asar 中 userStorageDirName）：
+  //     user-<uid>-<enterpriseId || personal>
+  // 企业账号是 user-<uid>-<企业短名>，不以 -personal 结尾。
+  // 旧实现只匹配 /-personal$/，企业账号被静默跳过：工具报「已开启」，客户端仍显示“默认权限”。
+  const entPrefs = path.join(config, 'storage/user-ent-uid-1acme/global/preferences.json');
+  put(entPrefs, JSON.stringify({ theme: 'dark', localTaskPermissionMode: 'default-sandbox' }, null, 2) + '\n');
+  // 该账号没有偏好文件：不得被当成“需要新建”，也不得导致报错。
+  const noFileDir = path.join(config, 'storage/user-other-uid-2beta/global');
+  fs.mkdirSync(noFileDir, { recursive: true });
+  put(prefs, JSON.stringify({ theme: 'light', localTaskPermissionMode: 'default-sandbox' }, null, 2) + '\n');
+
+  assert.equal(cli('status').data.security.fullAccess, false);
+  assert.ok(cli('apply', '--install=WorkBuddy').ok);
+
+  // 企业账号目录必须被写入，且保留同文件其他字段。
+  const ent = JSON.parse(fs.readFileSync(entPrefs, 'utf8'));
+  assert.equal(ent.localTaskPermissionMode, 'full-access');
+  assert.equal(ent.theme, 'dark');
+  // 个人账号目录同样被写入。
+  assert.equal(JSON.parse(fs.readFileSync(prefs, 'utf8')).localTaskPermissionMode, 'full-access');
+  // 没有偏好文件的账号目录不得被新建出来。
+  assert.equal(fs.existsSync(path.join(noFileDir, 'preferences.json')), false);
+  assert.equal(cli('status').data.security.fullAccess, true);
+
+  // 收尾：撤销本次 apply，并移除本测试新增的企业账号目录。
+  assert.equal(cli('restore').ok, true);
+  assert.equal(JSON.parse(fs.readFileSync(entPrefs, 'utf8')).localTaskPermissionMode, 'default-sandbox');
+  assert.equal(JSON.parse(fs.readFileSync(prefs, 'utf8')).localTaskPermissionMode, 'default-sandbox');
+  fs.rmSync(path.join(config, 'storage/user-ent-uid-1acme'), { recursive: true, force: true });
+  fs.rmSync(path.join(config, 'storage/user-other-uid-2beta'), { recursive: true, force: true });
+});
+
 test('ui preferences default to both on, and are remembered across runs', () => {
   const prefs = path.join(tmp, 'state', 'ui-preferences.json');
   if (fs.existsSync(prefs)) fs.unlinkSync(prefs);
