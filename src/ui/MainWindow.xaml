@@ -26,12 +26,31 @@
     <ItemsControl ItemsSource="{Binding Installs}" IsEnabled="{Binding IsIdle}" AutomationProperties.AutomationId="Installs">
      <ItemsControl.ItemTemplate>
       <DataTemplate>
-       <CheckBox IsChecked="{Binding Selected, Mode=TwoWay}" Margin="0,0,0,4">
-        <CheckBox.ToolTip><TextBlock Text="{Binding Label}" TextWrapping="Wrap" MaxWidth="640"/></CheckBox.ToolTip>
-        <!-- 用可换行的 TextBlock 而不是字符串 Content：安装路径可能很长，
-             窄窗口（最小宽度 640）下字符串 Content 不换行，会被硬切且无省略号。 -->
-        <TextBlock Text="{Binding Label}" TextWrapping="Wrap"/>
-       </CheckBox>
+       <StackPanel Margin="0,0,0,8">
+        <CheckBox IsChecked="{Binding Selected, Mode=TwoWay}">
+         <CheckBox.ToolTip><TextBlock Text="{Binding Label}" TextWrapping="Wrap" MaxWidth="640"/></CheckBox.ToolTip>
+         <!-- 用可换行的 TextBlock 而不是字符串 Content：安装路径可能很长，
+              窄窗口（最小宽度 640）下字符串 Content 不换行，会被硬切且无省略号。 -->
+         <TextBlock Text="{Binding Label}" TextWrapping="Wrap"/>
+        </CheckBox>
+        <!-- 版本行：当前客户端版本 + 上次应用版本（指纹只显示到版本号，完整值悬停可见）。
+             两者不一致时染成告警色，说明客户端升级过、需要重新应用。 -->
+        <TextBlock Margin="24,2,0,0" FontSize="12" TextTrimming="CharacterEllipsis"
+          AutomationProperties.AutomationId="InstallVersion"
+          Text="{Binding VersionLine}" ToolTip="{Binding VersionTooltip}">
+         <TextBlock.Style>
+          <Style TargetType="TextBlock">
+           <Setter Property="Foreground" Value="#647680"/>
+           <Style.Triggers>
+            <DataTrigger Binding="{Binding VersionMismatch}" Value="True">
+             <Setter Property="Foreground" Value="#B45309"/>
+             <Setter Property="FontWeight" Value="SemiBold"/>
+            </DataTrigger>
+           </Style.Triggers>
+          </Style>
+         </TextBlock.Style>
+        </TextBlock>
+       </StackPanel>
       </DataTemplate>
      </ItemsControl.ItemTemplate>
     </ItemsControl>

@@ -32,7 +32,7 @@ node wb.mjs status --root="D:\Program Files\WorkBuddy" --json
 
 ### 用 Release 包（推荐）
 
-在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.6.0-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 **`WorkBuddyUnlock.exe`** 即可。
+在仓库 **Releases** 页下载 `workbuddy-prompt-unlock-1.6.1-full.zip`，解压到任意可写目录（不要放进 WorkBuddy 安装目录），双击 **`WorkBuddyUnlock.exe`** 即可。
 
 Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，也不需要联网。
 
@@ -41,7 +41,7 @@ Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，�
 ## 人使用：一键完成
 
 双击项目根目录下的 **`WorkBuddyUnlock.exe`**（WPF 应用，本身不弹命令行窗口）。
-窗口标题栏显示**软件名 + 版本号 + 实现语言**（如 `WorkBuddy Prompt Unlock v1.6.0 · C#`）；版本号来自 `package.json`，与 Release 包名、EXE 文件属性一致。窗口内容区不重复主标题/副标题，打开窗口即看到实时同步状态、目标安装和操作按钮。
+窗口标题栏显示**软件名 + 版本号 + 实现语言**（如 `WorkBuddy Prompt Unlock v1.6.1 · C#`）；版本号来自 `package.json`，与 Release 包名、EXE 文件属性一致。窗口内容区不重复主标题/副标题，打开窗口即看到实时同步状态、目标安装和操作按钮。
 
 1. 先保存 WorkBuddy 中的工作。
 2. 点击 **一键应用**：校验提示词 → 关闭客户端 → 备份 → 同步 → 校验 → 重启。
@@ -67,6 +67,13 @@ Release 包**已内置** `src/tools/node_modules`，不需要 `npm install`，�
 两个状态的可视样例：`docs/ui-synthetic-normal.png`（待同步）与 `docs/ui-synthetic-synced.png`（已同步）。
 
 “一键应用”按钮会在待同步时变为告警色，已同步时回到主题绿。
+
+**每个安装行下面会显示版本**，如 `当前 5.8.3　·　上次应用 5.7.6`：
+
+- **当前**：客户端现在的版本指纹；**上次应用**：上次成功“一键应用”时的版本。
+- 两者不一致时该行染成告警色（提醒升级过、之前的改动可能已失效）。
+- 取不到时显示“未知 / 无记录”（如旧版本产生的备份没有记录，不会伪造数值）。
+- 指纹只显示到版本号主体；完整值（带构建哈希）悬停可见。
 
 界面还能：
 - **选择目标安装**：勾选要处理的安装，默认全部勾选。两套安装各自使用独立配置目录，取消勾选就不会动它。

@@ -26,6 +26,7 @@ public sealed record PromptFile(string Name, string Path)
 public sealed class InstallTarget : INotifyPropertyChanged
 {
     private bool selected;
+    private string currentVersion = "", appliedVersion = "";
     public event PropertyChangedEventHandler? PropertyChanged;
     public required string Name { get; init; }
     public required string Root { get; init; }
@@ -36,6 +37,54 @@ public sealed class InstallTarget : INotifyPropertyChanged
         get => selected;
         set { if (selected == value) return; selected = value; PropertyChanged?.Invoke(this, new(nameof(Selected))); }
     }
+
+    /// <summary>客户端当前版本指纹（如 5.8.2-wb.41111488.g…）。空表示取不到。</summary>
+    public string CurrentVersion
+    {
+        get => currentVersion;
+        set { if (currentVersion == value) return; currentVersion = value; NotifyVersion(); }
+    }
+
+    /// <summary>上次成功“一键应用”时记录的版本指纹。空表示没有记录（旧备份或从未应用）。</summary>
+    public string AppliedVersion
+    {
+        get => appliedVersion;
+        set { if (appliedVersion == value) return; appliedVersion = value; NotifyVersion(); }
+    }
+
+    private void NotifyVersion()
+    {
+        foreach (var n in new[] { nameof(CurrentVersion), nameof(AppliedVersion), nameof(VersionLine), nameof(VersionMismatch), nameof(VersionTooltip) })
+            PropertyChanged?.Invoke(this, new(n));
+    }
+
+    /// <summary>指纹前缀（版本号主体），目录名带构建哈希，界面只显示到第二段。</summary>
+    private static string Short(string fingerprint)
+    {
+        if (string.IsNullOrEmpty(fingerprint)) return "";
+        var head = fingerprint.Split('-')[0];
+        return head;
+    }
+
+    /// <summary>当前版本与上次应用版本不一致：说明客户端升级过，之前的改动可能已失效。</summary>
+    public bool VersionMismatch => CurrentVersion.Length > 0 && AppliedVersion.Length > 0
+        && CurrentVersion != AppliedVersion;
+
+    /// <summary>“当前 X · 上次应用 Y”一行；取不到的段落用“未知 / 无记录”说明，不伪造数值。</summary>
+    public string VersionLine
+    {
+        get
+        {
+            var cur = CurrentVersion.Length > 0 ? Short(CurrentVersion) : "未知";
+            var app = AppliedVersion.Length > 0 ? Short(AppliedVersion) : "无记录";
+            return $"当前 {cur}　·　上次应用 {app}";
+        }
+    }
+
+    /// <summary>悬停显示完整指纹，避免界面被长哈希刷屏。</summary>
+    public string VersionTooltip =>
+        $"客户端当前：{(CurrentVersion.Length > 0 ? CurrentVersion : "未知")}\n上次应用：{(AppliedVersion.Length > 0 ? AppliedVersion : "无记录（旧版本应用或从未应用）")}";
+
     /// <summary>用户看到的说明：安装名 + 配置目录是否有独立安全配置。</summary>
     public string Label => ConfigExists
         ? $"{Name}  ·  {Root}"
@@ -174,26 +223,41 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private void UpdateSyncVerdict(System.Text.Json.JsonElement data, int count)
     {
         var reason = data.TryGetProperty("applyReason", out var r) ? r.GetString() : null;
-        var versions = new List<string>();
-        if (data.TryGetProperty("installs", out var inst) && inst.ValueKind == JsonValueKind.Array)
-            foreach (var i in inst.EnumerateArray())
-                if (i.TryGetProperty("clientVersion", out var v) && v.ValueKind == JsonValueKind.String
-                    && i.TryGetProperty("name", out var n))
-                    versions.Add($"{n.GetString()} {v.GetString()!.Split('-')[0]}");
-        var versionText = versions.Count > 0 ? $"　客户端版本：{string.Join("、", versions)}" : "";
+        // 版本信息不再塞进横幅：改到“目标安装”每行展示（当前版本 + 上次应用版本）。
+        UpdateInstallVersions(data);
 
         NeedApply = count > 0;
         if (count > 0)
         {
             SyncHeadline = $"⚠  检测到 {count} 个文件需要同步，请点“一键应用”";
-            SyncDetail = (reason == "upgraded"
+            SyncDetail = reason == "upgraded"
                 ? "客户端版本已变化，官方升级会覆盖模板并换掉旧插件缓存，之前的改动已失效。"
-                : "提示词文件与客户端内容不一致（你改过 prompts/，或客户端回写了文件）。") + versionText;
+                : "提示词文件与客户端内容不一致（你改过 prompts/，或客户端回写了文件）。";
         }
         else
         {
             SyncHeadline = "✓  客户端已是当前提示词，无需操作";
-            SyncDetail = "此状态会自动复查；执行“一键应用”后，或客户端升级后，这里会立即更新。" + versionText;
+            SyncDetail = "此状态会自动复查；执行“一键应用”后，或客户端升级后，这里会立即更新。";
+        }
+    }
+
+    /// <summary>
+    /// 把每个安装的“当前版本 / 上次应用版本”回填到对应行。
+    /// 用安装根匹配：CLI 的 clientVersions/appliedVersions 以 root 为键，installs 也带 root。
+    /// 取不到时保留空字符串，界面会显示“未知 / 无记录”，不伪造数值。
+    /// </summary>
+    private void UpdateInstallVersions(System.Text.Json.JsonElement data)
+    {
+        var current = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var applied = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (data.TryGetProperty("clientVersions", out var cv) && cv.ValueKind == JsonValueKind.Object)
+            foreach (var p in cv.EnumerateObject()) if (p.Value.ValueKind == JsonValueKind.String) current[p.Name] = p.Value.GetString()!;
+        if (data.TryGetProperty("appliedVersions", out var av) && av.ValueKind == JsonValueKind.Object)
+            foreach (var p in av.EnumerateObject()) if (p.Value.ValueKind == JsonValueKind.String) applied[p.Name] = p.Value.GetString()!;
+        foreach (var inst in Installs)
+        {
+            inst.CurrentVersion = current.TryGetValue(inst.Root, out var c) ? c : "";
+            inst.AppliedVersion = applied.TryGetValue(inst.Root, out var a) ? a : "";
         }
     }
 

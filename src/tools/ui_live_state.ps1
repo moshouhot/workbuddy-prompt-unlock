@@ -52,7 +52,16 @@ try {
     # 1) 起始状态：模板是官方内容 → 横幅应提示需要同步，且按钮为告警色。
     WaitUntil { (TextOf 'SyncHeadline') -match '需要同步' } 'headline=needApply'
     if ((TextOf 'SyncHeadline') -notmatch '检测到 \d+ 个文件需要同步') { throw "unexpected headline: $(TextOf 'SyncHeadline')" }
-    if ((TextOf 'SyncDetail') -notmatch '客户端版本') { throw "detail should carry client version, got: $(TextOf 'SyncDetail')" }
+    # 客户端版本不再放到横幅里，改为每行安装各自展示：当前 + 上次应用。
+    if ((TextOf 'SyncDetail') -match '客户端版本') {
+        throw "banner must NOT carry client version, got: $(TextOf 'SyncDetail')"
+    }
+    $vCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'InstallVersion')
+    $mine = @($window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $vCond) | ForEach-Object { $_.Current.Name })
+    if ($mine.Count -lt 1) { throw 'each install must show 当前/上次应用 version line' }
+    if (($mine -join '|') -notmatch '当前 .+·.+上次应用 ') { throw "bad version line: $mine" }
+    Write-Host "版本行: $($mine -join ' / ')"
     $banner0 = (FindId 'SyncBanner').Current.BoundingRectangle
     Write-Host "初始横幅: $(TextOf 'SyncHeadline')"
 

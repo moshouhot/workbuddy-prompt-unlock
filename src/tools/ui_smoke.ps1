@@ -69,13 +69,21 @@ try {
             [System.Windows.Automation.ControlType]::Text))) | ForEach-Object { $_.Current.Name }
     if ($titleTexts -contains 'WorkBuddy Prompt Unlock') { throw 'Content area must not repeat the app title' }
     if ($titleTexts -match '本地提示词管理') { throw 'Content area must not repeat the subtitle' }
-    # 实时同步横幅：启动时内容未同步，必须显示告警态且带客户端版本。
+    # 实时同步横幅：启动时内容未同步，必须显示告警态。
     if ((FindId 'SyncHeadline').Current.Name -notmatch '检测到 \d+ 个文件需要同步') {
         throw "Need-apply banner expected, got: $((FindId 'SyncHeadline').Current.Name)"
     }
-    if ((FindId 'SyncDetail').Current.Name -notmatch '客户端版本') {
-        throw "Banner detail must carry client version, got: $((FindId 'SyncDetail').Current.Name)"
+    # 客户端版本不再出现在横幅里，改为每行安装各自展示（见下方版本行断言）。
+    if ((FindId 'SyncDetail').Current.Name -match '客户端版本') {
+        throw "Banner must NOT carry client version, got: $((FindId 'SyncDetail').Current.Name)"
     }
+    # 每个安装行都要有“当前 X · 上次应用 Y”。
+    $vCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'InstallVersion')
+    $versionRows = @($window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $vCond) | ForEach-Object { $_.Current.Name })
+    if ($versionRows.Count -lt 1) { throw 'Each install must show a version line' }
+    if (($versionRows -join '|') -notmatch '当前 ') { throw "version row missing 当前: $versionRows" }
+    if (($versionRows -join '|') -notmatch '上次应用 ') { throw "version row missing 上次应用: $versionRows" }
     # Inspect the real tree first, then invoke controls by their observed IDs.
     $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object {
         if ($_.Current.AutomationId) { Write-Host $_.Current.ControlType.ProgrammaticName $_.Current.AutomationId $_.Current.IsEnabled }
